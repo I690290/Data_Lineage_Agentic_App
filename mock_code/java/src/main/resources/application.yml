@@ -1,0 +1,50 @@
+spring:
+  application:
+    name: customer-batch-app
+
+  datasource:
+    customer:
+      url: jdbc:db2://mainframe-host:50000/CUSTDB
+      username: ${DB_CUST_USER:custuser}
+      password: ${DB_CUST_PASS}
+      driver-class-name: com.ibm.db2.jcc.DB2Driver
+      schema: CUSTSCHEMA
+      hikari:
+        pool-name: CustomerPool
+        maximum-pool-size: 10
+
+    report:
+      url: jdbc:db2://mainframe-host:50000/RPTDB
+      username: ${DB_RPT_USER:rptuser}
+      password: ${DB_RPT_PASS}
+      driver-class-name: com.ibm.db2.jcc.DB2Driver
+      schema: RPTSCHEMA
+      hikari:
+        pool-name: ReportPool
+        maximum-pool-size: 5
+
+  batch:
+    job:
+      enabled: false
+    jdbc:
+      initialize-schema: never
+    datasource: customer
+
+batch:
+  chunk-size: 1000
+  skip-limit: 100
+  retry-limit: 3
+  customer:
+    table: CUSTSCHEMA.CUSTOMER_TABLE
+    status-filter: A
+  report:
+    table: RPTSCHEMA.REPORT_TABLE
+  account:
+    table: CUSTSCHEMA.ACCOUNT_TABLE
+  audit:
+    table: RPTSCHEMA.AUDIT_LOG
+
+logging:
+  level:
+    com.example.batch: DEBUG
+    org.springframework.batch: INFO

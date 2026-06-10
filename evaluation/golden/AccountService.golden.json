@@ -1,0 +1,40 @@
+{
+  "file_path": "mock_code/java/src/main/java/com/example/lineage/AccountService.java",
+  "language": "Java",
+  "ground_truth_assertions": [
+    {
+      "id": "accsvc-assert-001",
+      "source": {"entity": "ACCOUNT_SUMMARY", "column": "ACCOUNT_NUMBER", "type": "BIGINT"},
+      "target": {"entity": "AccountSummary.accountNumber", "column": "accountNumber", "type": "Long"},
+      "transformation": {"type": "JDBC_READ", "expression": "SELECT * FROM ACCOUNT_SUMMARY WHERE ACCOUNT_NUMBER = ?", "line": 32},
+      "cross_language": true
+    },
+    {
+      "id": "accsvc-assert-002",
+      "source": {"entity": "MONTHLY_REPORT", "column": "ACCOUNT_NUMBER", "type": "BIGINT"},
+      "target": {"entity": "Map<String,Object>", "column": "ACCOUNT_NUMBER", "type": "Object"},
+      "transformation": {"type": "JDBC_READ", "expression": "SELECT ... FROM MONTHLY_REPORT WHERE ACCOUNT_NUMBER = ? AND ...", "line": 45},
+      "cross_language": true
+    },
+    {
+      "id": "accsvc-assert-003",
+      "source": {"entity": "MONTHLY_REPORT", "column": "NET_SPEND", "type": "DECIMAL"},
+      "target": {"entity": "Map<String,Object>", "column": "NET_SPEND", "type": "Object"},
+      "transformation": {"type": "JDBC_READ", "expression": "SELECT NET_SPEND FROM MONTHLY_REPORT", "line": 45},
+      "cross_language": false
+    }
+  ],
+  "ground_truth_io": [
+    {"type": "READ", "target": "ACCOUNT_SUMMARY", "connection": "JDBC", "line": 32},
+    {"type": "READ", "target": "MONTHLY_REPORT", "connection": "JDBC", "line": 45},
+    {"type": "WRITE", "target": "ACCOUNT_SUMMARY", "operation": "UPDATE", "line": 76}
+  ],
+  "ground_truth_cross_language": [
+    {
+      "source": {"entity": "ACCOUNT_SUMMARY", "file": "load_accounts.sql", "language": "SQL"},
+      "target": {"entity": "AccountService.getMonthlyReport", "file": "AccountService.java", "language": "Java"},
+      "via_view": "MONTHLY_REPORT",
+      "end_to_end_path": ["account_output.dat", "load_accounts.sql", "ACCOUNT_SUMMARY", "MONTHLY_REPORT", "AccountService.java"]
+    }
+  ]
+}

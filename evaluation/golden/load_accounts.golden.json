@@ -1,0 +1,39 @@
+{
+  "file_path": "mock_code/sql/load_accounts.sql",
+  "language": "SQL",
+  "ground_truth_assertions": [
+    {
+      "id": "loadsql-assert-001",
+      "source": {"entity": "account_output.dat", "column": "ACCOUNT_NUMBER", "type": "CHAR(10)"},
+      "target": {"entity": "ACCOUNT_SUMMARY", "column": "ACCOUNT_NUMBER", "type": "BIGINT"},
+      "transformation": {"type": "LOAD_DATA", "expression": "LOAD DATA INFILE 'account_output.dat' INTO TABLE ACCOUNT_SUMMARY ... ACCOUNT_NUMBER POSITION(1:10)", "line": 5},
+      "cross_language": true
+    },
+    {
+      "id": "loadsql-assert-002",
+      "source": {"entity": "account_output.dat", "column": "CUSTOMER_NAME", "type": "CHAR(40)"},
+      "target": {"entity": "ACCOUNT_SUMMARY", "column": "CUSTOMER_NAME", "type": "VARCHAR(40)"},
+      "transformation": {"type": "LOAD_DATA", "expression": "LOAD DATA ... CUSTOMER_NAME POSITION(11:50)", "line": 9},
+      "cross_language": false
+    },
+    {
+      "id": "loadsql-assert-003",
+      "source": {"entity": "account_output.dat", "column": "BALANCE", "type": "DECIMAL"},
+      "target": {"entity": "ACCOUNT_SUMMARY", "column": "BALANCE", "type": "DECIMAL(15,2)"},
+      "transformation": {"type": "LOAD_DATA", "expression": "LOAD DATA ... BALANCE POSITION(56:72) DECIMAL EXTERNAL", "line": 13},
+      "cross_language": false
+    }
+  ],
+  "ground_truth_io": [
+    {"type": "READ", "target": "account_output.dat", "connection": "FILE", "line": 4},
+    {"type": "WRITE", "target": "ACCOUNT_SUMMARY", "operation": "LOAD", "line": 5}
+  ],
+  "ground_truth_cross_language": [
+    {
+      "source": {"entity": "ACCOUNT.OUTPUT.FILE", "file": "PROG001.cbl", "language": "COBOL", "dd": "OUTFILE"},
+      "intermediate": {"entity": "account_output.dat", "type": "flat_file"},
+      "target": {"entity": "ACCOUNT_SUMMARY", "file": "load_accounts.sql", "language": "SQL"},
+      "end_to_end_path": ["ACCOUNT-MASTER-FILE", "PROG001.cbl", "account_output.dat", "load_accounts.sql", "ACCOUNT_SUMMARY"]
+    }
+  ]
+}

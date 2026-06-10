@@ -1,0 +1,469 @@
+{
+  "_comment": "Expected data lineage for Credit Risk MI4014 daily transaction extract pipeline. Use this to validate agentic app output.",
+  "flow_name": "MI4014 Credit Risk Daily Transaction Extract",
+  "system": "Credit Risk Behaviour Scoring - TSB NAM65",
+  "version": "1.0",
+  "pipeline_steps": [
+    "STEP010: CRDB2EXT (DB2 CRISK.CUST_ACCOUNT_MASTER → CUST.BHSCORE.EXTRACT)",
+    "STEP020: CRTXNEXT (CUST.BHSCORE.EXTRACT + DB2 CRISK.DAILY_TRANSACTIONS → TRANS.BHSCORE.EXTRACT)",
+    "STEP030: DFSORT JOINKEYS merge (CUST.BHSCORE.EXTRACT + TRANS.BHSCORE.EXTRACT → MERGED.BHSCORE.EXTRACT)",
+    "STEP040: CRXMLGEN (MERGED.BHSCORE.EXTRACT → MI4014_Transaction_Extract_TSB_NAM65_YYYYMMDD.xml)",
+    "STEP050: FTP transfer (mainframe → Oracle server /app/neptune/load/)",
+    "Oracle load: MI4014_TRANSACCIONES_DIARIAS external table → MI4014_TRANSACCIONES_STG staging"
+  ],
+
+  "lineage_nodes": [
+    {
+      "id": "db2:CRISK.CUST_ACCOUNT_MASTER",
+      "type": "DataSource",
+      "sub_type": "DB2Table",
+      "name": "CRISK.CUST_ACCOUNT_MASTER",
+      "system": "IBM DB2 (Mainframe)",
+      "columns": [
+        "EXTERNAL_ACCOUNT_NUMBER", "SUB_ACCOUNT_NUMBER", "BOOK_ID",
+        "CUSTOMER_ID", "PRODUCT_TYPE", "RISK_SEGMENT", "BEHAVIOUR_SCORE",
+        "UNSECURED_IND", "ACCOUNT_OPEN_DATE", "NEW_MAIN_ACCOUNT_NUMBER",
+        "NEW_LOAN_ACCOUNT_NUMBER", "PROCESS_DATE", "ACCOUNT_STATUS",
+        "SCORING_ELIGIBLE_IND"
+      ]
+    },
+    {
+      "id": "db2:CRISK.DAILY_TRANSACTIONS",
+      "type": "DataSource",
+      "sub_type": "DB2Table",
+      "name": "CRISK.DAILY_TRANSACTIONS",
+      "system": "IBM DB2 (Mainframe)",
+      "columns": [
+        "EXTERNAL_ACCOUNT_NUMBER", "SUB_ACCOUNT_NUMBER", "BOOK_ID",
+        "TRANSACTION_CODE", "TRANSACTION_AMT", "TRAN_CATEGORY",
+        "POSTED_DATE", "EFFECTIVE_DATE", "UNSECURED_IND",
+        "NEW_MAIN_ACCOUNT_NUMBER", "NEW_LOAN_ACCOUNT_NUMBER", "PROCESS_DATE"
+      ]
+    },
+    {
+      "id": "program:CRDB2EXT",
+      "type": "TransformationUnit",
+      "sub_type": "COBOLProgram",
+      "name": "CRDB2EXT",
+      "language": "COBOL",
+      "description": "DB2 cursor-driven extract of eligible customer accounts",
+      "copybooks": ["CRCUSTAC"],
+      "db2_cursors": ["CSR_CUST_ACCT"],
+      "reads_from": ["db2:CRISK.CUST_ACCOUNT_MASTER"],
+      "writes_to": ["file:CUST.BHSCORE.EXTRACT"]
+    },
+    {
+      "id": "file:CUST.BHSCORE.EXTRACT",
+      "type": "Dataset",
+      "sub_type": "MainframeDataset",
+      "name": "CUST.BHSCORE.EXTRACT",
+      "dsn": "CRISK.BATCH.CUST.BHSCORE.EXTRACT",
+      "recfm": "FB",
+      "lrecl": 140,
+      "description": "Customer account extract - intermediate dataset"
+    },
+    {
+      "id": "program:CRTXNEXT",
+      "type": "TransformationUnit",
+      "sub_type": "COBOLProgram",
+      "name": "CRTXNEXT",
+      "language": "COBOL",
+      "description": "Transaction extract: reads CUST file, queries DB2 per account",
+      "copybooks": ["CRCUSTAC", "CRTRANSR"],
+      "db2_cursors": ["CSR_DAILY_TXN"],
+      "reads_from": [
+        "file:CUST.BHSCORE.EXTRACT",
+        "db2:CRISK.DAILY_TRANSACTIONS"
+      ],
+      "writes_to": ["file:TRANS.BHSCORE.EXTRACT"]
+    },
+    {
+      "id": "file:TRANS.BHSCORE.EXTRACT",
+      "type": "Dataset",
+      "sub_type": "MainframeDataset",
+      "name": "TRANS.BHSCORE.EXTRACT",
+      "dsn": "CRISK.BATCH.TRANS.BHSCORE.EXTRACT",
+      "recfm": "FB",
+      "lrecl": 160,
+      "description": "Transaction extract - intermediate dataset"
+    },
+    {
+      "id": "utility:DFSORT_STEP030",
+      "type": "TransformationUnit",
+      "sub_type": "JCLUtility",
+      "name": "DFSORT JOINKEYS MERGE (CRJBHSCR STEP030)",
+      "language": "JCL_SORT",
+      "description": "DFSORT JOINKEYS inner join merge on ACCT+SUB_ACCT; sorts by account, posted_date desc",
+      "reads_from": [
+        "file:CUST.BHSCORE.EXTRACT",
+        "file:TRANS.BHSCORE.EXTRACT"
+      ],
+      "writes_to": ["file:MERGED.BHSCORE.EXTRACT"],
+      "sort_key": "EXTERNAL_ACCT_NUM(1,20)+SUB_ACCT_NUM(21,10)+POSTED_DATE(77,10)_DESC"
+    },
+    {
+      "id": "file:MERGED.BHSCORE.EXTRACT",
+      "type": "Dataset",
+      "sub_type": "MainframeDataset",
+      "name": "MERGED.BHSCORE.EXTRACT",
+      "dsn": "CRISK.BATCH.MERGED.BHSCORE.EXTRACT",
+      "recfm": "FB",
+      "lrecl": 160,
+      "description": "Sorted and merged transaction+account extract"
+    },
+    {
+      "id": "program:CRXMLGEN",
+      "type": "TransformationUnit",
+      "sub_type": "COBOLProgram",
+      "name": "CRXMLGEN",
+      "language": "COBOL",
+      "description": "XML generator: reads merged extract, writes Oracle-compatible XML",
+      "copybooks": ["CRTRANSR", "CRXMLTAG"],
+      "reads_from": ["file:MERGED.BHSCORE.EXTRACT"],
+      "writes_to": ["file:MI4014_XML"]
+    },
+    {
+      "id": "file:MI4014_XML",
+      "type": "Dataset",
+      "sub_type": "XMLFile",
+      "name": "MI4014_Transaction_Extract_TSB_NAM65_YYYYMMDD.xml",
+      "path": "/app/neptune/load/MI4014_Transaction_Extract_TSB_NAM65_YYYYMMDD.xml",
+      "directory": "NEPTUNE_FILES_LOAD",
+      "description": "XML transaction extract for Oracle external table load"
+    },
+    {
+      "id": "oracle:BDD_NEPTUNE_DICC.MI4014_TRANSACCIONES_DIARIAS",
+      "type": "DataSource",
+      "sub_type": "OracleExternalTable",
+      "name": "BDD_NEPTUNE_DICC.MI4014_TRANSACCIONES_DIARIAS",
+      "system": "Oracle",
+      "schema": "BDD_NEPTUNE_DICC",
+      "table": "MI4014_TRANSACCIONES_DIARIAS",
+      "table_type": "EXTERNAL",
+      "reads_from": ["file:MI4014_XML"],
+      "columns": [
+        "MAIN_ACCOUNT_NUMBER", "SUB_ACCOUNT_NUMBER", "COMPANY",
+        "TRANSACTION_CODE", "TRANSACTION_AMOUNT", "TRANSACTION_GROUP",
+        "POSTED_DATE", "EFFECTIVE_DATE", "UNSECURED",
+        "NEW_MAIN_ACC_NUM", "NEW_LOAN_ACC_NUM"
+      ]
+    },
+    {
+      "id": "oracle:BDD_NEPTUNE_DICC.MI4014_TRANSACCIONES_STG",
+      "type": "Dataset",
+      "sub_type": "OracleTable",
+      "name": "BDD_NEPTUNE_DICC.MI4014_TRANSACCIONES_STG",
+      "system": "Oracle",
+      "schema": "BDD_NEPTUNE_DICC",
+      "table": "MI4014_TRANSACCIONES_STG",
+      "columns": [
+        "MAIN_ACCOUNT_NUMBER", "SUB_ACCOUNT_NUMBER", "COMPANY",
+        "TRANSACTION_CODE", "TRANSACTION_AMOUNT", "TRANSACTION_GROUP",
+        "POSTED_DATE", "EFFECTIVE_DATE", "UNSECURED",
+        "NEW_MAIN_ACC_NUM", "NEW_LOAN_ACC_NUM",
+        "LOAD_DATE", "SOURCE_FILE", "LOAD_STATUS"
+      ]
+    },
+    {
+      "id": "sql:MI4014_STAGE_INSERT",
+      "type": "TransformationUnit",
+      "sub_type": "SQLScript",
+      "name": "MI4014_STAGE_LOAD.sql INSERT",
+      "language": "SQL_ORACLE",
+      "description": "INSERT INTO MI4014_STG from external table with type casting",
+      "reads_from": ["oracle:BDD_NEPTUNE_DICC.MI4014_TRANSACCIONES_DIARIAS"],
+      "writes_to": ["oracle:BDD_NEPTUNE_DICC.MI4014_TRANSACCIONES_STG"]
+    },
+    {
+      "id": "oracle:BDD_NEPTUNE_DICC.V_MI4014_TRANSACCIONES_VALIDAS",
+      "type": "Dataset",
+      "sub_type": "OracleView",
+      "name": "V_MI4014_TRANSACCIONES_VALIDAS",
+      "reads_from": ["oracle:BDD_NEPTUNE_DICC.MI4014_TRANSACCIONES_STG"]
+    },
+    {
+      "id": "oracle:BDD_NEPTUNE_DICC.V_MI4014_ACCOUNT_SUMMARY",
+      "type": "Dataset",
+      "sub_type": "OracleView",
+      "name": "V_MI4014_ACCOUNT_SUMMARY",
+      "reads_from": ["oracle:BDD_NEPTUNE_DICC.V_MI4014_TRANSACCIONES_VALIDAS"]
+    }
+  ],
+
+  "lineage_edges": [
+    {
+      "id": "edge:CRISK.CUST_ACCOUNT_MASTER->CRDB2EXT",
+      "source": "db2:CRISK.CUST_ACCOUNT_MASTER",
+      "target": "program:CRDB2EXT",
+      "relationship": "READS_FROM",
+      "mechanism": "DB2 cursor CSR_CUST_ACCT"
+    },
+    {
+      "id": "edge:CRDB2EXT->CUST.BHSCORE.EXTRACT",
+      "source": "program:CRDB2EXT",
+      "target": "file:CUST.BHSCORE.EXTRACT",
+      "relationship": "WRITES_TO",
+      "mechanism": "COBOL sequential write (BHSCOEXT DD)"
+    },
+    {
+      "id": "edge:CUST.BHSCORE.EXTRACT->CRTXNEXT",
+      "source": "file:CUST.BHSCORE.EXTRACT",
+      "target": "program:CRTXNEXT",
+      "relationship": "READS_FROM",
+      "mechanism": "COBOL sequential read (BHSCOEXT DD) - driving file"
+    },
+    {
+      "id": "edge:CRISK.DAILY_TRANSACTIONS->CRTXNEXT",
+      "source": "db2:CRISK.DAILY_TRANSACTIONS",
+      "target": "program:CRTXNEXT",
+      "relationship": "READS_FROM",
+      "mechanism": "DB2 cursor CSR_DAILY_TXN per account"
+    },
+    {
+      "id": "edge:CRTXNEXT->TRANS.BHSCORE.EXTRACT",
+      "source": "program:CRTXNEXT",
+      "target": "file:TRANS.BHSCORE.EXTRACT",
+      "relationship": "WRITES_TO",
+      "mechanism": "COBOL sequential write (BHSCOTXN DD)"
+    },
+    {
+      "id": "edge:CUST.BHSCORE.EXTRACT->DFSORT",
+      "source": "file:CUST.BHSCORE.EXTRACT",
+      "target": "utility:DFSORT_STEP030",
+      "relationship": "READS_FROM",
+      "mechanism": "JCL SORTIN01 DD (F1 - account key LRECL=140)"
+    },
+    {
+      "id": "edge:TRANS.BHSCORE.EXTRACT->DFSORT",
+      "source": "file:TRANS.BHSCORE.EXTRACT",
+      "target": "utility:DFSORT_STEP030",
+      "relationship": "READS_FROM",
+      "mechanism": "JCL SORTIN02 DD (F2 - transaction key LRECL=160)"
+    },
+    {
+      "id": "edge:DFSORT->MERGED.BHSCORE.EXTRACT",
+      "source": "utility:DFSORT_STEP030",
+      "target": "file:MERGED.BHSCORE.EXTRACT",
+      "relationship": "WRITES_TO",
+      "mechanism": "JCL SORTOUT DD (inner join, sorted by account+date)"
+    },
+    {
+      "id": "edge:MERGED.BHSCORE.EXTRACT->CRXMLGEN",
+      "source": "file:MERGED.BHSCORE.EXTRACT",
+      "target": "program:CRXMLGEN",
+      "relationship": "READS_FROM",
+      "mechanism": "COBOL sequential read (BHSCOMRG DD)"
+    },
+    {
+      "id": "edge:CRXMLGEN->MI4014_XML",
+      "source": "program:CRXMLGEN",
+      "target": "file:MI4014_XML",
+      "relationship": "WRITES_TO",
+      "mechanism": "COBOL variable-length write (BHSCOXML DD) + FTP STEP050"
+    },
+    {
+      "id": "edge:MI4014_XML->EXT_TABLE",
+      "source": "file:MI4014_XML",
+      "target": "oracle:BDD_NEPTUNE_DICC.MI4014_TRANSACCIONES_DIARIAS",
+      "relationship": "READS_FROM",
+      "mechanism": "Oracle External Table ORACLE_LOADER LOCATION clause"
+    },
+    {
+      "id": "edge:EXT_TABLE->STAGE_INSERT",
+      "source": "oracle:BDD_NEPTUNE_DICC.MI4014_TRANSACCIONES_DIARIAS",
+      "target": "sql:MI4014_STAGE_INSERT",
+      "relationship": "READS_FROM",
+      "mechanism": "INSERT SELECT from external table (Oracle SQL)"
+    },
+    {
+      "id": "edge:STAGE_INSERT->STG_TABLE",
+      "source": "sql:MI4014_STAGE_INSERT",
+      "target": "oracle:BDD_NEPTUNE_DICC.MI4014_TRANSACCIONES_STG",
+      "relationship": "WRITES_TO",
+      "mechanism": "INSERT /*+ APPEND PARALLEL */ (MI4014_STAGE_LOAD.sql)"
+    },
+    {
+      "id": "edge:STG_TABLE->VIEW_VALIDAS",
+      "source": "oracle:BDD_NEPTUNE_DICC.MI4014_TRANSACCIONES_STG",
+      "target": "oracle:BDD_NEPTUNE_DICC.V_MI4014_TRANSACCIONES_VALIDAS",
+      "relationship": "READS_FROM",
+      "mechanism": "Oracle CREATE VIEW SELECT (MI4014_VIEW.sql)"
+    },
+    {
+      "id": "edge:VIEW_VALIDAS->VIEW_SUMMARY",
+      "source": "oracle:BDD_NEPTUNE_DICC.V_MI4014_TRANSACCIONES_VALIDAS",
+      "target": "oracle:BDD_NEPTUNE_DICC.V_MI4014_ACCOUNT_SUMMARY",
+      "relationship": "READS_FROM",
+      "mechanism": "Oracle CREATE VIEW SELECT aggregation (MI4014_VIEW.sql)"
+    }
+  ],
+
+  "column_level_lineage": [
+    {
+      "_comment": "DB2 → COBOL host variable mappings (CRDB2EXT / CRTXNEXT)",
+      "source_system": "DB2",
+      "target_system": "COBOL_HOST_VAR",
+      "mappings": [
+        {"source": "CRISK.CUST_ACCOUNT_MASTER.EXTERNAL_ACCOUNT_NUMBER", "target": "HV-EXT-ACCT-NUM", "program": "CRDB2EXT"},
+        {"source": "CRISK.CUST_ACCOUNT_MASTER.SUB_ACCOUNT_NUMBER",       "target": "HV-SUB-ACCT-NUM", "program": "CRDB2EXT"},
+        {"source": "CRISK.CUST_ACCOUNT_MASTER.BOOK_ID",                  "target": "HV-BOOK-ID",      "program": "CRDB2EXT"},
+        {"source": "CRISK.CUST_ACCOUNT_MASTER.UNSECURED_IND",            "target": "HV-UNSECURED-IND","program": "CRDB2EXT"},
+        {"source": "CRISK.CUST_ACCOUNT_MASTER.NEW_MAIN_ACCOUNT_NUMBER",  "target": "HV-NEW-MAIN-ACCT","program": "CRDB2EXT"},
+        {"source": "CRISK.CUST_ACCOUNT_MASTER.NEW_LOAN_ACCOUNT_NUMBER",  "target": "HV-NEW-LOAN-ACCT","program": "CRDB2EXT"},
+        {"source": "CRISK.DAILY_TRANSACTIONS.EXTERNAL_ACCOUNT_NUMBER",   "target": "HV-TXN-EXT-ACCT", "program": "CRTXNEXT"},
+        {"source": "CRISK.DAILY_TRANSACTIONS.TRANSACTION_CODE",          "target": "HV-TXN-CODE",     "program": "CRTXNEXT"},
+        {"source": "CRISK.DAILY_TRANSACTIONS.TRANSACTION_AMT",           "target": "HV-TXN-AMT",      "program": "CRTXNEXT"},
+        {"source": "CRISK.DAILY_TRANSACTIONS.TRAN_CATEGORY",             "target": "HV-TXN-CATEGORY", "program": "CRTXNEXT"},
+        {"source": "CRISK.DAILY_TRANSACTIONS.POSTED_DATE",               "target": "HV-TXN-POSTED-DT","program": "CRTXNEXT"},
+        {"source": "CRISK.DAILY_TRANSACTIONS.EFFECTIVE_DATE",            "target": "HV-TXN-EFFECTIVE-DT","program": "CRTXNEXT"}
+      ]
+    },
+    {
+      "_comment": "COBOL record → XML tag mappings (CRXMLGEN)",
+      "source_system": "COBOL_RECORD",
+      "target_system": "XML_TAG",
+      "mappings": [
+        {"source": "CTR-EXTERNAL-ACCT-NUM",  "xml_tag": "external_account_number", "program": "CRXMLGEN"},
+        {"source": "CTR-SUB-ACCOUNT-NUM",    "xml_tag": "sub_no",                  "program": "CRXMLGEN"},
+        {"source": "CTR-BOOK-ID",            "xml_tag": "book_id",                 "program": "CRXMLGEN"},
+        {"source": "CTR-TRANSACTION-CODE",   "xml_tag": "transaction_code",        "program": "CRXMLGEN"},
+        {"source": "CTR-TRANSACTION-AMT",    "xml_tag": "transaction_amt",         "program": "CRXMLGEN"},
+        {"source": "CTR-TRAN-CATEGORY",      "xml_tag": "tran_category",           "program": "CRXMLGEN"},
+        {"source": "CTR-POSTED-DATE",        "xml_tag": "posted_date",             "program": "CRXMLGEN"},
+        {"source": "CTR-EFFECTIVE-DATE",     "xml_tag": "effective_date",          "program": "CRXMLGEN"},
+        {"source": "CTR-UNSECURED-IND",      "xml_tag": "unsec_ind",               "program": "CRXMLGEN"},
+        {"source": "CTR-NEW-MAIN-ACCT-NUM",  "xml_tag": "New_Main_Account_Number", "program": "CRXMLGEN"},
+        {"source": "CTR-NEW-LOAN-ACCT-NUM",  "xml_tag": "New_Loan_Account_Number", "program": "CRXMLGEN"}
+      ]
+    },
+    {
+      "_comment": "XML tag → Oracle External Table column mappings (MI4014_EXT_TABLE.sql)",
+      "source_system": "XML_TAG",
+      "target_system": "Oracle_ExternalTable",
+      "mappings": [
+        {"xml_tag": "external_account_number", "oracle_column": "MAIN_ACCOUNT_NUMBER",  "table": "MI4014_TRANSACCIONES_DIARIAS"},
+        {"xml_tag": "sub_no",                  "oracle_column": "SUB_ACCOUNT_NUMBER",   "table": "MI4014_TRANSACCIONES_DIARIAS"},
+        {"xml_tag": "book_id",                 "oracle_column": "COMPANY",              "table": "MI4014_TRANSACCIONES_DIARIAS"},
+        {"xml_tag": "transaction_code",        "oracle_column": "TRANSACTION_CODE",     "table": "MI4014_TRANSACCIONES_DIARIAS"},
+        {"xml_tag": "transaction_amt",         "oracle_column": "TRANSACTION_AMOUNT",   "table": "MI4014_TRANSACCIONES_DIARIAS"},
+        {"xml_tag": "tran_category",           "oracle_column": "TRANSACTION_GROUP",    "table": "MI4014_TRANSACCIONES_DIARIAS"},
+        {"xml_tag": "posted_date",             "oracle_column": "POSTED_DATE",          "table": "MI4014_TRANSACCIONES_DIARIAS"},
+        {"xml_tag": "effective_date",          "oracle_column": "EFFECTIVE_DATE",       "table": "MI4014_TRANSACCIONES_DIARIAS"},
+        {"xml_tag": "unsec_ind",               "oracle_column": "UNSECURED",            "table": "MI4014_TRANSACCIONES_DIARIAS"},
+        {"xml_tag": "New_Main_Account_Number", "oracle_column": "NEW_MAIN_ACC_NUM",     "table": "MI4014_TRANSACCIONES_DIARIAS"},
+        {"xml_tag": "New_Loan_Account_Number", "oracle_column": "NEW_LOAN_ACC_NUM",     "table": "MI4014_TRANSACCIONES_DIARIAS"}
+      ]
+    },
+    {
+      "_comment": "Oracle External Table → Staging table column mappings (MI4014_STAGE_LOAD.sql)",
+      "source_system": "Oracle_ExternalTable",
+      "target_system": "Oracle_StagingTable",
+      "mappings": [
+        {"source": "MI4014_TRANSACCIONES_DIARIAS.MAIN_ACCOUNT_NUMBER",  "target": "MI4014_TRANSACCIONES_STG.MAIN_ACCOUNT_NUMBER",  "transform": "TRIM"},
+        {"source": "MI4014_TRANSACCIONES_DIARIAS.SUB_ACCOUNT_NUMBER",   "target": "MI4014_TRANSACCIONES_STG.SUB_ACCOUNT_NUMBER",   "transform": "TRIM"},
+        {"source": "MI4014_TRANSACCIONES_DIARIAS.COMPANY",              "target": "MI4014_TRANSACCIONES_STG.COMPANY",              "transform": "TRIM"},
+        {"source": "MI4014_TRANSACCIONES_DIARIAS.TRANSACTION_CODE",     "target": "MI4014_TRANSACCIONES_STG.TRANSACTION_CODE",     "transform": "TRIM"},
+        {"source": "MI4014_TRANSACCIONES_DIARIAS.TRANSACTION_AMOUNT",   "target": "MI4014_TRANSACCIONES_STG.TRANSACTION_AMOUNT",   "transform": "TO_NUMBER with FM9999999999999.99 mask"},
+        {"source": "MI4014_TRANSACCIONES_DIARIAS.TRANSACTION_GROUP",    "target": "MI4014_TRANSACCIONES_STG.TRANSACTION_GROUP",    "transform": "TRIM"},
+        {"source": "MI4014_TRANSACCIONES_DIARIAS.POSTED_DATE",          "target": "MI4014_TRANSACCIONES_STG.POSTED_DATE",          "transform": "TO_DATE YYYY-MM-DD"},
+        {"source": "MI4014_TRANSACCIONES_DIARIAS.EFFECTIVE_DATE",       "target": "MI4014_TRANSACCIONES_STG.EFFECTIVE_DATE",       "transform": "TO_DATE YYYY-MM-DD"},
+        {"source": "MI4014_TRANSACCIONES_DIARIAS.UNSECURED",            "target": "MI4014_TRANSACCIONES_STG.UNSECURED",            "transform": "TRIM"},
+        {"source": "MI4014_TRANSACCIONES_DIARIAS.NEW_MAIN_ACC_NUM",     "target": "MI4014_TRANSACCIONES_STG.NEW_MAIN_ACC_NUM",     "transform": "TRIM"},
+        {"source": "MI4014_TRANSACCIONES_DIARIAS.NEW_LOAN_ACC_NUM",     "target": "MI4014_TRANSACCIONES_STG.NEW_LOAN_ACC_NUM",     "transform": "TRIM"}
+      ]
+    },
+    {
+      "_comment": "End-to-end field traceability from DB2 source to Oracle target",
+      "end_to_end_column_paths": [
+        {
+          "field": "Account Number",
+          "path": [
+            "DB2: CRISK.CUST_ACCOUNT_MASTER.EXTERNAL_ACCOUNT_NUMBER",
+            "COBOL HV: HV-EXT-ACCT-NUM (CRDB2EXT)",
+            "COBOL Record: CRA-EXTERNAL-ACCT-NUM (CRCUSTAC.cpy)",
+            "Sequential Dataset: CUST.BHSCORE.EXTRACT pos 1-20",
+            "DFSORT: sort key F1 pos 1-20",
+            "DB2 cursor param: HV-QUERY-EXT-ACCT (CRTXNEXT)",
+            "DB2: CRISK.DAILY_TRANSACTIONS.EXTERNAL_ACCOUNT_NUMBER",
+            "COBOL HV: HV-TXN-EXT-ACCT (CRTXNEXT)",
+            "COBOL Record: CTR-EXTERNAL-ACCT-NUM (CRTRANSR.cpy)",
+            "Sequential Dataset: TRANS.BHSCORE.EXTRACT pos 1-20",
+            "DFSORT: REFORMAT pos 1-20 → MERGED pos 1-20",
+            "COBOL Read: CTR-EXTERNAL-ACCT-NUM (CRXMLGEN)",
+            "XML Tag: <external_account_number>",
+            "Oracle External Table: MAIN_ACCOUNT_NUMBER",
+            "Oracle Staging: MI4014_TRANSACCIONES_STG.MAIN_ACCOUNT_NUMBER"
+          ]
+        },
+        {
+          "field": "Transaction Amount",
+          "path": [
+            "DB2: CRISK.DAILY_TRANSACTIONS.TRANSACTION_AMT (DECIMAL(15,2))",
+            "COBOL HV: HV-TXN-AMT (S9(13)V99 COMP-3 CRTXNEXT)",
+            "COBOL Record: CTR-TRANSACTION-AMT (CRTRANSR.cpy)",
+            "Sequential Dataset: TRANS.BHSCORE.EXTRACT pos 47-63",
+            "DFSORT: REFORMAT includes pos 47-63",
+            "COBOL Move: CTR-TRANSACTION-AMT TO WS-AMT-DISPLAY (CRXMLGEN)",
+            "XML Tag: <transaction_amt> (sign + 2 decimal places)",
+            "Oracle External Table: TRANSACTION_AMOUNT (VARCHAR2 4000)",
+            "Oracle SQL: TO_NUMBER(TRIM(TRANSACTION_AMOUNT),'FM9999999999999.99')",
+            "Oracle Staging: MI4014_TRANSACCIONES_STG.TRANSACTION_AMOUNT (NUMBER(15,2))"
+          ]
+        }
+      ]
+    }
+  ],
+
+  "validation_checklist": [
+    {
+      "check": "Node count",
+      "expected": 14,
+      "description": "14 distinct lineage nodes (2 DB2, 4 datasets, 3 programs, 1 utility, 2 Oracle tables, 2 Oracle views)"
+    },
+    {
+      "check": "Edge count",
+      "expected": 15,
+      "description": "15 lineage edges covering all data flows"
+    },
+    {
+      "check": "COBOL programs extracted",
+      "expected": ["CRDB2EXT", "CRTXNEXT", "CRXMLGEN"],
+      "description": "3 COBOL programs must appear as transformation nodes"
+    },
+    {
+      "check": "DB2 tables extracted",
+      "expected": ["CRISK.CUST_ACCOUNT_MASTER", "CRISK.DAILY_TRANSACTIONS"],
+      "description": "Both DB2 tables must appear as data source nodes"
+    },
+    {
+      "check": "JCL SORT step extracted",
+      "expected": "CRJBHSCR.STEP030 (DFSORT JOINKEYS)",
+      "description": "JCL SORT card JOINKEYS must produce a transformation node"
+    },
+    {
+      "check": "Oracle external table extracted",
+      "expected": "BDD_NEPTUNE_DICC.MI4014_TRANSACCIONES_DIARIAS",
+      "description": "Oracle external table must be detected with ORACLE_LOADER type"
+    },
+    {
+      "check": "Oracle staging table extracted",
+      "expected": "BDD_NEPTUNE_DICC.MI4014_TRANSACCIONES_STG",
+      "description": "Staging table created by MI4014_STAGE_LOAD.sql must appear"
+    },
+    {
+      "check": "XML file as intermediate node",
+      "expected": "MI4014_Transaction_Extract_TSB_NAM65_*.xml",
+      "description": "The XML file must appear as an intermediate dataset node linking CRXMLGEN to Oracle"
+    },
+    {
+      "check": "Column-level lineage for MAIN_ACCOUNT_NUMBER",
+      "expected_path": "CRISK.CUST_ACCOUNT_MASTER.EXTERNAL_ACCOUNT_NUMBER → ... → MI4014_TRANSACCIONES_STG.MAIN_ACCOUNT_NUMBER",
+      "description": "End-to-end column lineage must trace account number through all 9 hops"
+    },
+    {
+      "check": "Copybook references",
+      "expected": ["CRCUSTAC", "CRTRANSR", "CRXMLTAG"],
+      "description": "All 3 copybooks must be extracted and linked to their using programs"
+    }
+  ]
+}

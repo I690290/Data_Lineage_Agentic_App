@@ -1,0 +1,258 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://openlineage.io/spec/1-0-5/OpenLineage.json",
+  "title": "OpenLineage",
+  "description": "OpenLineage event schema v1.0.5 — used for data lineage validation.",
+  "definitions": {
+    "RunEvent": {
+      "type": "object",
+      "required": ["eventType", "eventTime", "run", "job", "producer", "schemaURL"],
+      "properties": {
+        "eventType": {
+          "type": "string",
+          "enum": ["START", "RUNNING", "COMPLETE", "ABORT", "FAIL", "OTHER"]
+        },
+        "eventTime": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "producer": {
+          "type": "string",
+          "format": "uri"
+        },
+        "schemaURL": {
+          "type": "string",
+          "format": "uri"
+        },
+        "run": { "$ref": "#/definitions/Run" },
+        "job": { "$ref": "#/definitions/Job" },
+        "inputs": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/InputDataset" }
+        },
+        "outputs": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/OutputDataset" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "Run": {
+      "type": "object",
+      "required": ["runId"],
+      "properties": {
+        "runId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "facets": { "$ref": "#/definitions/RunFacets" }
+      }
+    },
+    "RunFacets": {
+      "type": "object",
+      "properties": {
+        "parent": { "$ref": "#/definitions/ParentRunFacet" },
+        "nominalTime": { "$ref": "#/definitions/NominalTimeRunFacet" },
+        "errorMessage": { "$ref": "#/definitions/ErrorMessageRunFacet" }
+      },
+      "additionalProperties": true
+    },
+    "ParentRunFacet": {
+      "type": "object",
+      "required": ["_producer", "_schemaURL", "run", "job"],
+      "properties": {
+        "_producer": { "type": "string", "format": "uri" },
+        "_schemaURL": { "type": "string", "format": "uri" },
+        "run": { "type": "object", "required": ["runId"], "properties": { "runId": { "type": "string" } } },
+        "job": { "type": "object", "required": ["namespace", "name"], "properties": { "namespace": { "type": "string" }, "name": { "type": "string" } } }
+      }
+    },
+    "NominalTimeRunFacet": {
+      "type": "object",
+      "required": ["_producer", "_schemaURL", "nominalStartTime"],
+      "properties": {
+        "_producer": { "type": "string" },
+        "_schemaURL": { "type": "string" },
+        "nominalStartTime": { "type": "string", "format": "date-time" },
+        "nominalEndTime": { "type": "string", "format": "date-time" }
+      }
+    },
+    "ErrorMessageRunFacet": {
+      "type": "object",
+      "required": ["_producer", "_schemaURL", "message", "programmingLanguage"],
+      "properties": {
+        "_producer": { "type": "string" },
+        "_schemaURL": { "type": "string" },
+        "message": { "type": "string" },
+        "programmingLanguage": { "type": "string" },
+        "stackTrace": { "type": "string" }
+      }
+    },
+    "Job": {
+      "type": "object",
+      "required": ["namespace", "name"],
+      "properties": {
+        "namespace": { "type": "string" },
+        "name": { "type": "string" },
+        "facets": { "$ref": "#/definitions/JobFacets" }
+      }
+    },
+    "JobFacets": {
+      "type": "object",
+      "properties": {
+        "sourceCode": { "$ref": "#/definitions/SourceCodeJobFacet" },
+        "sql": { "$ref": "#/definitions/SQLJobFacet" },
+        "documentation": { "$ref": "#/definitions/DocumentationJobFacet" }
+      },
+      "additionalProperties": true
+    },
+    "SourceCodeJobFacet": {
+      "type": "object",
+      "required": ["_producer", "_schemaURL", "language", "sourceCode"],
+      "properties": {
+        "_producer": { "type": "string" },
+        "_schemaURL": { "type": "string" },
+        "language": { "type": "string" },
+        "sourceCode": { "type": "string" }
+      }
+    },
+    "SQLJobFacet": {
+      "type": "object",
+      "required": ["_producer", "_schemaURL", "query"],
+      "properties": {
+        "_producer": { "type": "string" },
+        "_schemaURL": { "type": "string" },
+        "query": { "type": "string" }
+      }
+    },
+    "DocumentationJobFacet": {
+      "type": "object",
+      "required": ["_producer", "_schemaURL", "description"],
+      "properties": {
+        "_producer": { "type": "string" },
+        "_schemaURL": { "type": "string" },
+        "description": { "type": "string" }
+      }
+    },
+    "InputDataset": {
+      "type": "object",
+      "required": ["namespace", "name"],
+      "properties": {
+        "namespace": { "type": "string" },
+        "name": { "type": "string" },
+        "facets": { "$ref": "#/definitions/DatasetFacets" },
+        "inputFacets": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "OutputDataset": {
+      "type": "object",
+      "required": ["namespace", "name"],
+      "properties": {
+        "namespace": { "type": "string" },
+        "name": { "type": "string" },
+        "facets": { "$ref": "#/definitions/DatasetFacets" },
+        "outputFacets": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "DatasetFacets": {
+      "type": "object",
+      "properties": {
+        "schema": { "$ref": "#/definitions/SchemaDatasetFacet" },
+        "dataSource": { "$ref": "#/definitions/DatasourceDatasetFacet" },
+        "columnLineage": { "$ref": "#/definitions/ColumnLineageDatasetFacet" },
+        "dataQualityMetrics": { "$ref": "#/definitions/DataQualityMetricsInputDatasetFacet" }
+      },
+      "additionalProperties": true
+    },
+    "SchemaDatasetFacet": {
+      "type": "object",
+      "required": ["_producer", "_schemaURL"],
+      "properties": {
+        "_producer": { "type": "string" },
+        "_schemaURL": { "type": "string" },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": { "type": "string" },
+              "type": { "type": "string" },
+              "description": { "type": "string" },
+              "tags": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        }
+      }
+    },
+    "DatasourceDatasetFacet": {
+      "type": "object",
+      "required": ["_producer", "_schemaURL", "name", "uri"],
+      "properties": {
+        "_producer": { "type": "string" },
+        "_schemaURL": { "type": "string" },
+        "name": { "type": "string" },
+        "uri": { "type": "string" }
+      }
+    },
+    "ColumnLineageDatasetFacet": {
+      "type": "object",
+      "required": ["_producer", "_schemaURL", "fields"],
+      "properties": {
+        "_producer": { "type": "string" },
+        "_schemaURL": { "type": "string" },
+        "fields": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["inputFields"],
+            "properties": {
+              "inputFields": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["namespace", "name", "field"],
+                  "properties": {
+                    "namespace": { "type": "string" },
+                    "name": { "type": "string" },
+                    "field": { "type": "string" },
+                    "transformations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "type": { "type": "string", "enum": ["DIRECT", "INDIRECT", "MASKED", "TRUNCATED"] },
+                          "subtype": { "type": "string" },
+                          "description": { "type": "string" },
+                          "masking": { "type": "boolean" }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "transformationDescription": { "type": "string" },
+              "transformationType": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "DataQualityMetricsInputDatasetFacet": {
+      "type": "object",
+      "required": ["_producer", "_schemaURL"],
+      "properties": {
+        "_producer": { "type": "string" },
+        "_schemaURL": { "type": "string" },
+        "rowCount": { "type": "integer" },
+        "bytes": { "type": "integer" },
+        "fileCount": { "type": "integer" },
+        "columnMetrics": { "type": "object", "additionalProperties": { "type": "object" } }
+      }
+    }
+  },
+  "type": "object",
+  "oneOf": [
+    { "$ref": "#/definitions/RunEvent" }
+  ]
+}

@@ -1,0 +1,24 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.DS_Store
+.pytest_cache/
+*__pycache__/
+
+# Virtual environments
+.venv
+
+.env
+.env.example
+
+.github/
+chroma_db/
+hash_cache.db
+
+# Node.js packages
+node_modules/
+frontend/node_modules/

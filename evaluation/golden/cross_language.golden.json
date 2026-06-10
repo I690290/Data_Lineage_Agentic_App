@@ -1,0 +1,69 @@
+{
+  "description": "Cross-language end-to-end lineage flows spanning JCL, COBOL, SQL, and Java",
+  "version": "1.0.0",
+  "flows": [
+    {
+      "flow_id": "flow-001",
+      "name": "Account Pipeline (COBOL → SQL → Java)",
+      "nodes": [
+        {"id": "src-acct-file",   "type": "file",    "name": "account_master.dat",   "language": "data"},
+        {"id": "jcl-job",         "type": "job",     "name": "DAILY_ACCOUNT_LOAD",   "language": "JCL"},
+        {"id": "prog001",         "type": "program", "name": "PROG001",               "language": "COBOL"},
+        {"id": "out-acct-file",   "type": "file",    "name": "account_output.dat",   "language": "data"},
+        {"id": "sql-load-acct",   "type": "script",  "name": "load_accounts.sql",    "language": "SQL"},
+        {"id": "tbl-acct-summary","type": "table",   "name": "ACCOUNT_SUMMARY",      "language": "SQL"},
+        {"id": "view-monthly",    "type": "view",    "name": "MONTHLY_REPORT",       "language": "SQL"},
+        {"id": "java-accsvc",     "type": "service", "name": "AccountService.java",  "language": "Java"}
+      ],
+      "edges": [
+        {"from": "src-acct-file",    "to": "prog001",          "type": "READS_FROM",  "via": "INFILE DD"},
+        {"from": "jcl-job",          "to": "prog001",          "type": "EXECUTES",    "via": "EXEC PGM=PROG001"},
+        {"from": "prog001",          "to": "out-acct-file",    "type": "WRITES_TO",   "via": "OUTFILE DD"},
+        {"from": "out-acct-file",    "to": "sql-load-acct",    "type": "LOADS_FROM",  "via": "INFILE clause"},
+        {"from": "sql-load-acct",    "to": "tbl-acct-summary", "type": "WRITES_TO",   "via": "LOAD DATA"},
+        {"from": "tbl-acct-summary", "to": "view-monthly",     "type": "READS_FROM",  "via": "JOIN"},
+        {"from": "view-monthly",     "to": "java-accsvc",      "type": "READS_FROM",  "via": "JDBC query"}
+      ],
+      "end_to_end_path": [
+        "account_master.dat",
+        "DAILY_ACCOUNT_LOAD.jcl",
+        "PROG001.cbl",
+        "account_output.dat",
+        "load_accounts.sql",
+        "ACCOUNT_SUMMARY",
+        "MONTHLY_REPORT",
+        "AccountService.java"
+      ]
+    },
+    {
+      "flow_id": "flow-002",
+      "name": "Transaction Pipeline (COBOL → Java)",
+      "nodes": [
+        {"id": "src-tran-file",   "type": "file",    "name": "transaction_input.dat", "language": "data"},
+        {"id": "jcl-job",         "type": "job",     "name": "DAILY_ACCOUNT_LOAD",    "language": "JCL"},
+        {"id": "prog002",         "type": "program", "name": "PROG002",                "language": "COBOL"},
+        {"id": "out-tran-file",   "type": "file",    "name": "valid_trans.dat",        "language": "data"},
+        {"id": "java-txn-proc",   "type": "service", "name": "TransactionProcessor",   "language": "Java"},
+        {"id": "tbl-txn-detail",  "type": "table",   "name": "TRANSACTION_DETAIL",     "language": "SQL"},
+        {"id": "view-monthly",    "type": "view",    "name": "MONTHLY_REPORT",         "language": "SQL"}
+      ],
+      "edges": [
+        {"from": "src-tran-file",  "to": "prog002",         "type": "READS_FROM", "via": "TRANIN DD"},
+        {"from": "jcl-job",        "to": "prog002",         "type": "EXECUTES",   "via": "EXEC PGM=PROG002"},
+        {"from": "prog002",        "to": "out-tran-file",   "type": "WRITES_TO",  "via": "VALIDOUT DD"},
+        {"from": "out-tran-file",  "to": "java-txn-proc",   "type": "READS_FROM", "via": "BufferedReader"},
+        {"from": "java-txn-proc",  "to": "tbl-txn-detail",  "type": "WRITES_TO",  "via": "JdbcTemplate.batchUpdate"},
+        {"from": "tbl-txn-detail", "to": "view-monthly",    "type": "READS_FROM", "via": "JOIN in CREATE VIEW"}
+      ],
+      "end_to_end_path": [
+        "transaction_input.dat",
+        "DAILY_ACCOUNT_LOAD.jcl",
+        "PROG002.cbl",
+        "valid_trans.dat",
+        "TransactionProcessor.java",
+        "TRANSACTION_DETAIL",
+        "MONTHLY_REPORT"
+      ]
+    }
+  ]
+}

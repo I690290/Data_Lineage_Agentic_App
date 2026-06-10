@@ -1,0 +1,60 @@
+{
+  "file_path": "mock_code/cobol/PROG001.cbl",
+  "language": "COBOL",
+  "ground_truth_assertions": [
+    {
+      "id": "prog001-assert-001",
+      "source": {"entity": "ACCOUNT-MASTER-FILE", "column": "AM-ACCOUNT-NUMBER", "type": "PIC 9(10)"},
+      "target": {"entity": "WS-ACCT-NUM", "column": "WS-ACCT-NUM", "type": "PIC 9(10)"},
+      "transformation": {"type": "MOVE", "expression": "MOVE AM-ACCOUNT-NUMBER TO WS-ACCT-NUM", "line": 100},
+      "cross_language": false
+    },
+    {
+      "id": "prog001-assert-002",
+      "source": {"entity": "ACCOUNT-MASTER-FILE", "column": "AM-CUSTOMER-NAME", "type": "PIC X(40)"},
+      "target": {"entity": "WS-CUST-NAME", "column": "WS-CUST-NAME", "type": "PIC X(40)"},
+      "transformation": {"type": "MOVE", "expression": "MOVE AM-CUSTOMER-NAME TO WS-CUST-NAME", "line": 101},
+      "cross_language": false
+    },
+    {
+      "id": "prog001-assert-003",
+      "source": {"entity": "ACCOUNT-MASTER-FILE", "column": "AM-BALANCE", "type": "COMP-3"},
+      "target": {"entity": "WS-BALANCE-WORK", "column": "WS-BALANCE-WORK", "type": "COMP-3"},
+      "transformation": {"type": "MOVE", "expression": "MOVE AM-BALANCE TO WS-BALANCE-WORK", "line": 102},
+      "cross_language": false
+    },
+    {
+      "id": "prog001-assert-004",
+      "source": {"entity": "WS-BALANCE-WORK", "column": "WS-BALANCE-WORK", "type": "COMP-3"},
+      "target": {"entity": "WS-BALANCE-FORMATTED", "column": "WS-BALANCE-FORMATTED", "type": "COMP-3"},
+      "transformation": {"type": "COMPUTE", "expression": "COMPUTE WS-BALANCE-FORMATTED = WS-BALANCE-WORK * 1.00", "line": 104},
+      "cross_language": false
+    },
+    {
+      "id": "prog001-assert-005",
+      "source": {"entity": "WS-ACCT-NUM", "column": "WS-ACCT-NUM", "type": "PIC 9(10)"},
+      "target": {"entity": "ACCOUNT-OUTPUT-FILE", "column": "AO-ACCOUNT-NUMBER", "type": "PIC 9(10)"},
+      "transformation": {"type": "MOVE", "expression": "MOVE WS-ACCT-NUM TO AO-ACCOUNT-NUMBER", "line": 115},
+      "cross_language": false
+    },
+    {
+      "id": "prog001-assert-006",
+      "source": {"entity": "ACCOUNT-MASTER-FILE", "column": "AM-ACCOUNT-NUMBER", "type": "PIC 9(10)"},
+      "target": {"entity": "ACCOUNT-OUTPUT-FILE", "column": "AO-ACCOUNT-NUMBER", "type": "PIC 9(10)"},
+      "transformation": {"type": "MOVE_CHAIN", "expression": "AM-ACCOUNT-NUMBER -> WS-ACCT-NUM -> AO-ACCOUNT-NUMBER", "line": 115},
+      "cross_language": false
+    }
+  ],
+  "ground_truth_io": [
+    {"type": "READ", "target": "ACCOUNT-MASTER-FILE", "dd_name": "INFILE", "line": 80},
+    {"type": "WRITE", "target": "ACCOUNT-OUTPUT-FILE", "dd_name": "OUTFILE", "line": 125}
+  ],
+  "ground_truth_cross_language": [
+    {
+      "source": {"entity": "ACCOUNT-MASTER-FILE", "file": "PROG001.cbl", "language": "COBOL"},
+      "intermediate": {"entity": "account_output.dat", "type": "file", "dd_name": "OUTFILE"},
+      "target": {"entity": "ACCOUNT_SUMMARY", "file": "load_accounts.sql", "language": "SQL"},
+      "end_to_end_path": ["ACCOUNT-MASTER-FILE", "PROG001.cbl", "account_output.dat", "load_accounts.sql", "ACCOUNT_SUMMARY"]
+    }
+  ]
+}

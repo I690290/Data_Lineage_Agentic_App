@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MI4014_TRANSACTION_EXTRACT>
+  <FileDate>20260514</FileDate>
+  <Source>TSB_NAM65</Source>
+<Item>
+  <external_account_number>GBR0001234567890</external_account_number>
+  <sub_no>001</sub_no>
+  <book_id>TSB001</book_id>
+  <transaction_code>CR_PYMNT</transaction_code>
+  <transaction_amt>1500.00</transaction_amt>
+  <tran_category>CREDIT</tran_category>
+  <posted_date>2026-05-14</posted_date>
+  <effective_date>2026-05-13</effective_date>
+  <unsec_ind>N</unsec_ind>
+  <New_Main_Account_Number>GBR0001234567890</New_Main_Account_Number>
+  <New_Loan_Account_Number></New_Loan_Account_Number>
+</Item>
+<Item>
+  <external_account_number>GBR0001234567890</external_account_number>
+  <sub_no>001</sub_no>
+  <book_id>TSB001</book_id>
+  <transaction_code>DR_UTIL</transaction_code>
+  <transaction_amt>-250.75</transaction_amt>
+  <tran_category>DEBIT</tran_category>
+  <posted_date>2026-05-13</posted_date>
+  <effective_date>2026-05-13</effective_date>
+  <unsec_ind>N</unsec_ind>
+  <New_Main_Account_Number>GBR0001234567890</New_Main_Account_Number>
+  <New_Loan_Account_Number></New_Loan_Account_Number>
+</Item>
+<Item>
+  <external_account_number>GBR0009876543210</external_account_number>
+  <sub_no>002</sub_no>
+  <book_id>TSB002</book_id>
+  <transaction_code>LN_RPYMT</transaction_code>
+  <transaction_amt>-850.00</transaction_amt>
+  <tran_category>REPAY</tran_category>
+  <posted_date>2026-05-14</posted_date>
+  <effective_date>2026-05-14</effective_date>
+  <unsec_ind>Y</unsec_ind>
+  <New_Main_Account_Number></New_Main_Account_Number>
+  <New_Loan_Account_Number>LN00987654321</New_Loan_Account_Number>
+</Item>
+<Item>
+  <external_account_number>GBR0005551234567</external_account_number>
+  <sub_no>001</sub_no>
+  <book_id>TSB001</book_id>
+  <transaction_code>MG_PYMNT</transaction_code>
+  <transaction_amt>-1200.00</transaction_amt>
+  <tran_category>MORTG</tran_category>
+  <posted_date>2026-05-14</posted_date>
+  <effective_date>2026-05-14</effective_date>
+  <unsec_ind>N</unsec_ind>
+  <New_Main_Account_Number>GBR0005551234567</New_Main_Account_Number>
+  <New_Loan_Account_Number>MG00555123456</New_Loan_Account_Number>
+</Item>
+<Item>
+  <external_account_number>GBR0002223334445</external_account_number>
+  <sub_no>003</sub_no>
+  <book_id>TSB003</book_id>
+  <transaction_code>CC_CHRGE</transaction_code>
+  <transaction_amt>-45.99</transaction_amt>
+  <tran_category>CREDIT</tran_category>
+  <posted_date>2026-05-12</posted_date>
+  <effective_date>2026-05-12</effective_date>
+  <unsec_ind>Y</unsec_ind>
+  <New_Main_Account_Number></New_Main_Account_Number>
+  <New_Loan_Account_Number></New_Loan_Account_Number>
+</Item>
+</MI4014_TRANSACTION_EXTRACT>
