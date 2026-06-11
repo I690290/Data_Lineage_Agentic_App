@@ -349,11 +349,11 @@ class ExpectedLineageEvaluator:
 
     @staticmethod
     def _fuzzy_name_match(needle: str, haystack: list[str]) -> bool:
-        n = needle.upper().strip()
+        n = needle.strip("'\" \t").upper()
         if not n:
             return False
         for name in haystack:
-            h = name.upper().strip()
+            h = name.strip("'\" \t").upper()
             if n in h or h in n:
                 return True
         return False

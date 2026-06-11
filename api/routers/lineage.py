@@ -161,24 +161,32 @@ async def get_full_graph() -> dict[str, Any]:
             node_result = session.run(
                 """
                 MATCH (n)
-                RETURN n.node_id       AS id,
-                       n.name          AS name,
-                       n.node_type     AS type,
-                       n.entity_subtype AS sub_type,
-                       n.system        AS system,
-                       n.language      AS language,
-                       n.schema_name   AS schema
+                WHERE n.id IS NOT NULL
+                RETURN n.id        AS id,
+                       n.name      AS name,
+                       CASE labels(n)[0]
+                         WHEN 'COBOLProgram' THEN 'TransformationUnit'
+                         WHEN 'JCLJob'       THEN 'TransformationUnit'
+                         WHEN 'JavaClass'    THEN 'TransformationUnit'
+                         WHEN 'SQLProcedure' THEN 'TransformationUnit'
+                         ELSE 'DataEntity'
+                       END         AS type,
+                       labels(n)[0] AS sub_type,
+                       n.system    AS system,
+                       n.language  AS language,
+                       n.namespace AS schema
                 LIMIT 500
                 """
             )
             edge_result = session.run(
                 """
                 MATCH (a)-[r]->(b)
-                RETURN a.node_id    AS source,
-                       b.node_id    AS target,
-                       r.edge_id    AS id,
-                       r.relationship AS relationship,
-                       r.confidence AS confidence
+                WHERE a.id IS NOT NULL AND b.id IS NOT NULL
+                RETURN a.id           AS source,
+                       b.id           AS target,
+                       toString(id(r)) AS id,
+                       type(r)        AS relationship,
+                       r.confidence   AS confidence
                 LIMIT 1000
                 """
             )
@@ -186,7 +194,7 @@ async def get_full_graph() -> dict[str, Any]:
                 _normalise_node({
                     "id":       r["id"],
                     "name":     r["name"] or r["id"],
-                    "type":     r["type"] or "DataSource",
+                    "type":     r["type"] or "DataEntity",
                     "sub_type": r["sub_type"] or "",
                     "system":   r["system"] or "",
                     "language": r["language"] or "",
@@ -227,17 +235,15 @@ async def get_lineage_summary() -> dict[str, Any]:
                 """
                 MATCH (n)
                 RETURN
-                  count(n)                                                      AS total_nodes,
-                  count(CASE WHEN n.node_type = 'DataEntity' THEN 1 END)        AS entity_count,
-                  count(CASE WHEN n.node_type = 'TransformationUnit' THEN 1 END) AS transform_count,
-                  count(CASE WHEN n.language = 'cobol'  THEN 1 END)             AS cobol_count,
-                  count(CASE WHEN n.language = 'jcl'    THEN 1 END)             AS job_count,
-                  count(CASE WHEN n.language = 'java'   THEN 1 END)             AS java_count,
-                  count(CASE WHEN n.node_type = 'DataEntity'
-                              AND n.system IN ['DB2','ORACLE','VSAM']
-                             THEN 1 END)                                         AS table_count,
-                  count(CASE WHEN n.entity_subtype IN ['file','xml','dataset']
-                             THEN 1 END)                                         AS output_count
+                  count(n)                                                                AS total_nodes,
+                  count(CASE WHEN NOT labels(n)[0] IN ['COBOLProgram','JCLJob','JavaClass','SQLProcedure','Column'] THEN 1 END) AS entity_count,
+                  count(CASE WHEN labels(n)[0] IN ['COBOLProgram','JCLJob','JavaClass','SQLProcedure'] THEN 1 END)              AS transform_count,
+                  count(CASE WHEN n.language = 'cobol' OR labels(n)[0] = 'COBOLProgram' THEN 1 END)                            AS cobol_count,
+                  count(CASE WHEN n.language = 'jcl'   OR labels(n)[0] = 'JCLJob'       THEN 1 END)                            AS job_count,
+                  count(CASE WHEN n.language = 'java'  OR labels(n)[0] = 'JavaClass'     THEN 1 END)                            AS java_count,
+                  count(CASE WHEN n.language = 'sql'   OR labels(n)[0] = 'SQLProcedure'  THEN 1 END)                            AS sql_count,
+                  count(CASE WHEN n.system IN ['DB2','ORACLE','VSAM'] THEN 1 END)                                               AS table_count,
+                  count(CASE WHEN labels(n)[0] IN ['FlatFile','XMLFile','MainframeDataset'] THEN 1 END)                         AS output_count
                 """
             ).single()
             edge_result = session.run("MATCH ()-[r]->() RETURN count(r) AS edge_count").single()
@@ -250,6 +256,7 @@ async def get_lineage_summary() -> dict[str, Any]:
             "entity_count":    counts.get("entity_count", 0),
             "job_count":       counts.get("job_count", 0),
             "cobol_count":     counts.get("cobol_count", 0),
+            "sql_count":       counts.get("sql_count", 0),
             "output_count":    counts.get("output_count", 0),
             # Extended breakdown
             "total_nodes":     counts.get("total_nodes", 0),
@@ -273,17 +280,23 @@ async def search_nodes(q: str = Query(..., min_length=1)) -> dict[str, Any]:
             result = session.run(
                 """
                 MATCH (n)
-                WHERE toLower(coalesce(n.name, ''))        CONTAINS toLower($q)
-                   OR toLower(coalesce(n.node_id, ''))     CONTAINS toLower($q)
-                   OR toLower(coalesce(n.language, ''))    CONTAINS toLower($q)
-                   OR toLower(coalesce(n.system, ''))      CONTAINS toLower($q)
-                   OR toLower(coalesce(n.entity_subtype,'')) CONTAINS toLower($q)
-                RETURN n.node_id       AS id,
-                       n.name          AS name,
-                       n.node_type     AS type,
-                       n.entity_subtype AS sub_type,
-                       n.system        AS system,
-                       n.language      AS language
+                WHERE n.id IS NOT NULL
+                  AND (   toLower(coalesce(n.name, ''))     CONTAINS toLower($q)
+                       OR toLower(coalesce(n.id, ''))       CONTAINS toLower($q)
+                       OR toLower(coalesce(n.language, '')) CONTAINS toLower($q)
+                       OR toLower(coalesce(n.system, ''))   CONTAINS toLower($q))
+                RETURN n.id        AS id,
+                       n.name      AS name,
+                       CASE labels(n)[0]
+                         WHEN 'COBOLProgram' THEN 'TransformationUnit'
+                         WHEN 'JCLJob'       THEN 'TransformationUnit'
+                         WHEN 'JavaClass'    THEN 'TransformationUnit'
+                         WHEN 'SQLProcedure' THEN 'TransformationUnit'
+                         ELSE 'DataEntity'
+                       END         AS type,
+                       labels(n)[0] AS sub_type,
+                       n.system    AS system,
+                       n.language  AS language
                 LIMIT 50
                 """,
                 q=q,
@@ -292,7 +305,7 @@ async def search_nodes(q: str = Query(..., min_length=1)) -> dict[str, Any]:
                 {
                     "id":       r["id"],
                     "name":     r["name"] or r["id"],
-                    "type":     r["type"] or "DataSource",
+                    "type":     r["type"] or "DataEntity",
                     "sub_type": r["sub_type"] or "MainframeDataset",
                     "system":   r["system"] or "",
                     "language": r["language"] or "",

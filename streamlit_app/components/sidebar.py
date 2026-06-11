@@ -34,22 +34,26 @@ def render_sidebar(api_client: LineageAPIClient) -> None:
             history = []
 
         if history:
-            for entry in history[:10]:
+            for idx, entry in enumerate(history[:10]):
                 question = entry.get("question", "")
                 label = f"{question[:60]}…" if len(question) > 60 else question
-                with st.expander(label):
-                    st.markdown(f"**Q:** {question}")
-                    st.markdown(f"**A:** {entry.get('answer', '')[:300]}")
-                    if st.button("Load this conversation", key=f"load_{entry.get('id')}"):
-                        st.session_state.messages = [
-                            {"role": "user", "content": entry.get("question", ""), "citations": []},
-                            {
-                                "role": "assistant",
-                                "content": entry.get("answer", ""),
-                                "citations": entry.get("citations", []),
-                            },
-                        ]
-                        st.rerun()
+                try:
+                    with st.expander(label):
+                        st.markdown(f"**Q:** {question}")
+                        st.markdown(f"**A:** {entry.get('answer', '')[:300]}")
+                        entry_key = entry.get('id') or idx
+                        if st.button("Load this conversation", key=f"load_{entry_key}"):
+                            st.session_state.messages = [
+                                {"role": "user", "content": entry.get("question", ""), "citations": []},
+                                {
+                                    "role": "assistant",
+                                    "content": entry.get("answer", ""),
+                                    "citations": entry.get("citations", []),
+                                },
+                            ]
+                            st.rerun()
+                except Exception:
+                    continue
         else:
             st.caption("No conversation history yet.")
 
@@ -71,6 +75,7 @@ def render_sidebar(api_client: LineageAPIClient) -> None:
             with col1:
                 st.metric("Entities", summary.get("entity_count", 0))
                 st.metric("JCL Jobs", summary.get("job_count", 0))
+                st.metric("SQL Scripts", summary.get("sql_count", 0))
             with col2:
                 st.metric("COBOL Programs", summary.get("cobol_count", 0))
                 st.metric("Java Classes", summary.get("java_count", 0))
@@ -78,3 +83,5 @@ def render_sidebar(api_client: LineageAPIClient) -> None:
             edges = summary.get("edge_count", 0)
             if total:
                 st.caption(f"{total} nodes · {edges} relationships in graph")
+        except Exception:
+            st.caption("Graph stats unavailable — backend may be offline.")

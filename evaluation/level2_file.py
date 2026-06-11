@@ -136,4 +136,4 @@ class FileEvaluator:
     @staticmethod
     def _normalise(value: Any) -> str:
         """Normalise comparable values."""
-        return str(value or "").strip().upper()
+        return str(value or "").strip("'\" \t").upper()
