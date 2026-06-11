@@ -1,7 +1,11 @@
 """Reflexion retry mechanism with episodic memory accumulation."""
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
+
+
+_ORACLE_PATH = Path(__file__).parent.parent / "mock_code" / "expected_lineage" / "expected_lineage.json"
 
 
 class ReflexionRetry:
@@ -31,6 +35,7 @@ class ReflexionRetry:
         self,
         state: dict[str, Any],
         verification_results: list[dict[str, Any]],
+        checklist_hints: list[str] | None = None,
     ) -> dict[str, Any]:
         """Update agent state after a verification failure.
 
@@ -41,6 +46,9 @@ class ReflexionRetry:
         Args:
             state: Current LangGraph state dict.
             verification_results: Results from ``VerificationGate.verify()``.
+            checklist_hints: Optional list of hint strings from
+                ``ExpectedLineageEvaluator.checklist_hints_for_reflexion()``
+                describing which oracle-expected lineage elements are missing.
 
         Returns:
             Updated state dict with ``retry_count``, ``episodic_memory``,
@@ -72,7 +80,7 @@ class ReflexionRetry:
                 "retry_count": retry_count,
             }
 
-        # Build episodic memory entries for each failure
+        # Build episodic memory entries for each verification failure
         for result in failed_results:
             assertion_id = result.get("assertion_id", "unknown")
             error_msg = result.get("error_msg", "verification failed")
@@ -88,6 +96,10 @@ class ReflexionRetry:
             )
             episodic_memory.append(memory_entry)
 
+        # Append oracle checklist hints — tell the agent exactly what is missing
+        for hint in (checklist_hints or []):
+            episodic_memory.append(hint)
+
         return {
             **state,
             "retry_count": retry_count + 1,
@@ -100,23 +112,35 @@ class ReflexionRetry:
 
         Args:
             episodic_memory: List of failure context strings accumulated
-                across retry attempts.
+                across retry attempts.  May include oracle checklist hints
+                injected by ``update_state``.
 
         Returns:
             Formatted multi-line string describing past failures for the agent.
         """
         if not episodic_memory:
             return ""
-        lines = [
-            "PREVIOUS ATTEMPTS FAILED — CORRECTION CONTEXT:",
-            "=" * 50,
-        ]
-        for i, entry in enumerate(episodic_memory, 1):
-            lines.append(f"[Failure {i}] {entry}")
+
+        verification_entries = [e for e in episodic_memory if not e.startswith("MISSING LINEAGE") and not e.startswith("PATH BREAK")]
+        hint_entries = [e for e in episodic_memory if e.startswith("MISSING LINEAGE") or e.startswith("PATH BREAK")]
+
+        lines = ["PREVIOUS ATTEMPTS FAILED — CORRECTION CONTEXT:", "=" * 50]
+
+        if verification_entries:
+            lines.append(">> AST VERIFICATION FAILURES:")
+            for i, entry in enumerate(verification_entries, 1):
+                lines.append(f"  [Failure {i}] {entry}")
+
+        if hint_entries:
+            lines.append("")
+            lines.append(">> KNOWN EXPECTED LINEAGE THAT IS MISSING FROM YOUR OUTPUT:")
+            for hint in hint_entries:
+                lines.append(f"  [Oracle hint] {hint}")
+
         lines.extend([
             "=" * 50,
             "Using the above context, correct your assertions before responding.",
-            "Focus on exact line numbers and verified entity names.",
+            "Focus on exact line numbers, verified entity names, and the missing lineage elements listed above.",
         ])
         return "\n".join(lines)
 

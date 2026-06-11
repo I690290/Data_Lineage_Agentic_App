@@ -32,7 +32,6 @@ MODULES: list[str] = [
     "evaluation.level2_file",
     "evaluation.level3_system",
     "models.lineage_models",
-    "nodes.column_lineage_node",
 ]
 
 ok = fail = 0

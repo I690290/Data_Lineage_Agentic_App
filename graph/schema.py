@@ -1,42 +1,118 @@
-"""Neo4j graph schema definitions for data lineage storage."""
+"""Neo4j graph schema definitions for physical-entity data lineage storage."""
 from __future__ import annotations
 
 
-# Node types with required properties
+# ─── Node types ─────────────────────────────────────────────────────────────
+# Physical data-storage entities
 NODE_SCHEMAS: dict[str, list[str]] = {
-    "File": ["name", "path", "type", "language"],
-    "Database": ["name", "host", "type"],
-    "Table": ["name", "schema", "database", "columns"],
-    "Column": ["name", "data_type", "table", "nullable"],
-    "Program": ["name", "language", "file_path", "entry_point"],
-    "Function": ["name", "program", "start_line", "end_line"],
-    "Transformation": ["type", "expression", "source_location"],
-    "Job": ["name", "type", "schedule"],
-    "View": ["name", "schema", "definition"],
-    "DataFile": ["name", "path", "format", "delimiter"],
+    # Source/target data stores
+    "DB2Table":      ["name", "schema_name", "database", "columns", "system"],
+    "FlatFile":      ["name", "dsn", "lrecl", "format", "system"],
+    "XMLFile":       ["name", "dsn", "schema_url", "system"],
+    "OracleTable":   ["name", "schema_name", "database", "columns", "system"],
+    "OracleView":    ["name", "schema_name", "definition", "system"],
+    "ExternalTable": ["name", "schema_name", "access_driver", "location", "system"],
+
+    # Transformation programs
+    "COBOLProgram":  ["name", "program_id", "file_path", "division", "language"],
+    "JCLJob":        ["name", "job_name", "class", "notify", "file_path"],
+    "JCLStep":       ["name", "step_name", "program", "job_name", "sequence"],
+    "DFSORTStep":    ["name", "step_name", "job_name", "operation"],
+    "JavaClass":     ["name", "class_name", "package", "file_path", "language"],
+    "SQLProcedure":  ["name", "file_path", "language"],
+
+    # Column-level granularity
+    "Column": ["name", "data_type", "entity", "entity_type", "nullable", "position"],
 }
 
-# Edge types with required properties
+# ─── Edge types ─────────────────────────────────────────────────────────────
 EDGE_SCHEMAS: dict[str, list[str]] = {
-    "READS_FROM": ["transformation_logic", "confidence", "source_location"],
-    "WRITES_TO": ["transformation_logic", "confidence", "source_location"],
-    "TRANSFORMS": ["expression", "type", "confidence"],
-    "CALLS": ["call_type", "source_location"],
-    "DEPENDS_ON": ["dependency_type"],
-    "MAPS_TO": ["mapping_type", "expression", "confidence"],
-    "EXECUTES": ["step_name", "source_location"],
-    "LOADS_FROM": ["load_method", "delimiter", "source_location"],
-    "DEFINED_IN": ["file_path", "start_line"],
+    # Entity-level flows (Program → DataStore)
+    "READS_FROM": ["confidence", "dd_name", "source_location", "program"],
+    "WRITES_TO":  ["confidence", "dd_name", "source_location", "program"],
+
+    # Column-level flows — transformation_expression is the hover payload
+    "MAPS_TO": [
+        "mapping_type", "transformation_expression", "paragraph",
+        "source_line", "confidence",
+    ],
+
+    # Structural
+    "DEFINED_IN": ["entity", "position"],
+    "EXECUTES":   ["step_name", "sequence"],
+    "CALLS":      ["call_type", "source_location"],
     "JOINS_WITH": ["join_type", "join_condition"],
+
+    # Cross-language
+    "CROSS_LANGUAGE_LINK": ["confidence", "link_type", "evidence"],
 }
 
-# Cypher constraint / index definitions for schema initialisation
+# ─── Cypher constraints / indexes ────────────────────────────────────────────
 CONSTRAINT_QUERIES: list[str] = [
-    "CREATE CONSTRAINT IF NOT EXISTS FOR (n:Table) REQUIRE n.name IS UNIQUE",
-    "CREATE CONSTRAINT IF NOT EXISTS FOR (n:Column) REQUIRE (n.table, n.name) IS UNIQUE",
-    "CREATE CONSTRAINT IF NOT EXISTS FOR (n:Program) REQUIRE n.name IS UNIQUE",
-    "CREATE CONSTRAINT IF NOT EXISTS FOR (n:Job) REQUIRE n.name IS UNIQUE",
-    "CREATE CONSTRAINT IF NOT EXISTS FOR (n:File) REQUIRE n.path IS UNIQUE",
-    "CREATE INDEX IF NOT EXISTS FOR (n:Table) ON (n.schema)",
-    "CREATE INDEX IF NOT EXISTS FOR (n:Column) ON (n.data_type)",
+    # Uniqueness constraints on physical entity nodes
+    "CREATE CONSTRAINT IF NOT EXISTS FOR (n:DB2Table)      REQUIRE n.name IS UNIQUE",
+    "CREATE CONSTRAINT IF NOT EXISTS FOR (n:OracleTable)   REQUIRE n.name IS UNIQUE",
+    "CREATE CONSTRAINT IF NOT EXISTS FOR (n:OracleView)    REQUIRE n.name IS UNIQUE",
+    "CREATE CONSTRAINT IF NOT EXISTS FOR (n:ExternalTable) REQUIRE n.name IS UNIQUE",
+    "CREATE CONSTRAINT IF NOT EXISTS FOR (n:FlatFile)      REQUIRE n.name IS UNIQUE",
+    "CREATE CONSTRAINT IF NOT EXISTS FOR (n:XMLFile)       REQUIRE n.name IS UNIQUE",
+    "CREATE CONSTRAINT IF NOT EXISTS FOR (n:COBOLProgram)  REQUIRE n.name IS UNIQUE",
+    "CREATE CONSTRAINT IF NOT EXISTS FOR (n:JCLJob)        REQUIRE n.name IS UNIQUE",
+    "CREATE CONSTRAINT IF NOT EXISTS FOR (n:JavaClass)     REQUIRE n.name IS UNIQUE",
+    "CREATE CONSTRAINT IF NOT EXISTS FOR (n:SQLProcedure)  REQUIRE n.name IS UNIQUE",
+    # Column uniqueness within its entity
+    "CREATE CONSTRAINT IF NOT EXISTS FOR (n:Column) REQUIRE (n.entity, n.name) IS UNIQUE",
+    # Performance indexes
+    "CREATE INDEX IF NOT EXISTS FOR (n:DB2Table)    ON (n.schema_name)",
+    "CREATE INDEX IF NOT EXISTS FOR (n:OracleTable) ON (n.schema_name)",
+    "CREATE INDEX IF NOT EXISTS FOR (n:Column)      ON (n.data_type)",
+    "CREATE INDEX IF NOT EXISTS FOR (n:JCLStep)     ON (n.job_name)",
 ]
+
+# ─── entity_type string → Neo4j label mapping ────────────────────────────────
+ENTITY_TYPE_TO_LABEL: dict[str, str] = {
+    "DB2_TABLE":      "DB2Table",
+    "FLAT_FILE":      "FlatFile",
+    "XML_FILE":       "XMLFile",
+    "ORACLE_TABLE":   "OracleTable",
+    "ORACLE_VIEW":    "OracleView",
+    "EXTERNAL_TABLE": "ExternalTable",
+    "COBOL_PROGRAM":  "COBOLProgram",
+    "JCL_JOB":        "JCLJob",
+    "JCL_STEP":       "JCLStep",
+    "JAVA_CLASS":     "JavaClass",
+    "SQL_PROCEDURE":  "SQLProcedure",
+    # OpenLineage namespace-based fallbacks
+    "db2://":         "DB2Table",
+    "oracle://":      "OracleTable",
+    "file://":        "FlatFile",
+    "xml://":         "XMLFile",
+}
+
+
+def entity_type_to_neo4j_label(entity_type: str, entity_name: str = "") -> str:
+    """Resolve an entity_type string to the correct Neo4j label.
+
+    Falls back to name-based heuristics when entity_type is unrecognised.
+    """
+    if entity_type in ENTITY_TYPE_TO_LABEL:
+        return ENTITY_TYPE_TO_LABEL[entity_type]
+
+    # Heuristic: classify from name
+    upper = entity_name.upper()
+    if upper.endswith(".XML") or ".XML." in upper:
+        return "XMLFile"
+    if upper.startswith("V_") or upper.endswith("_VIEW") or upper.startswith("V_MI4014"):
+        return "OracleView"
+    dot_count = entity_name.count(".")
+    if dot_count >= 2 and "_" in entity_name:
+        # three-qualifier mainframe DSN → FlatFile
+        return "FlatFile"
+    if dot_count == 1:
+        schema, table = entity_name.split(".", 1)
+        schema_upper = schema.upper()
+        if schema_upper in ("CRISK", "DB2"):
+            return "DB2Table"
+        if schema_upper in ("BDD_NEPTUNE_DICC", "ORACLE"):
+            return "OracleTable"
+    return "FlatFile"  # safe default

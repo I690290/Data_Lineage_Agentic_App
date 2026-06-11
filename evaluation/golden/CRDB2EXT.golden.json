@@ -1,0 +1,133 @@
+{
+  "file_path": "mock_code/cobol/CRDB2EXT.cbl",
+  "language": "COBOL",
+  "chunk_count": 4,
+  "ground_truth_assertions": [
+    {
+      "id": "crdb2ext-assert-001",
+      "source": {
+        "entity": "CRISK.CUST_ACCOUNT_MASTER",
+        "column": "EXTERNAL_ACCOUNT_NUMBER",
+        "type": "DB2Table",
+        "data_type": "VARCHAR"
+      },
+      "target": {
+        "entity": "CRDB2EXT",
+        "column": "HV-EXT-ACCT-NUM",
+        "type": "program",
+        "data_type": "PIC X(20)"
+      },
+      "transformation": {
+        "type": "EMBEDDED_SQL",
+        "expression": "EXEC SQL FETCH CSR_CUST_ACCT INTO :HV-EXT-ACCT-NUM",
+        "line": 0
+      },
+      "cross_language": false
+    },
+    {
+      "id": "crdb2ext-assert-002",
+      "source": {
+        "entity": "CRISK.CUST_ACCOUNT_MASTER",
+        "column": "SUB_ACCOUNT_NUMBER",
+        "type": "DB2Table",
+        "data_type": "VARCHAR"
+      },
+      "target": {
+        "entity": "CRDB2EXT",
+        "column": "HV-SUB-ACCT-NUM",
+        "type": "program",
+        "data_type": "PIC X(10)"
+      },
+      "transformation": {
+        "type": "EMBEDDED_SQL",
+        "expression": "EXEC SQL FETCH CSR_CUST_ACCT INTO :HV-SUB-ACCT-NUM",
+        "line": 0
+      },
+      "cross_language": false
+    },
+    {
+      "id": "crdb2ext-assert-003",
+      "source": {
+        "entity": "CRISK.CUST_ACCOUNT_MASTER",
+        "column": "BOOK_ID",
+        "type": "DB2Table",
+        "data_type": "VARCHAR"
+      },
+      "target": {
+        "entity": "CRDB2EXT",
+        "column": "HV-BOOK-ID",
+        "type": "program",
+        "data_type": "PIC X(6)"
+      },
+      "transformation": {
+        "type": "EMBEDDED_SQL",
+        "expression": "EXEC SQL FETCH CSR_CUST_ACCT INTO :HV-BOOK-ID",
+        "line": 0
+      },
+      "cross_language": false
+    },
+    {
+      "id": "crdb2ext-assert-004",
+      "source": {
+        "entity": "CRDB2EXT",
+        "column": "",
+        "type": "program"
+      },
+      "target": {
+        "entity": "CUST.BHSCORE.EXTRACT",
+        "column": "",
+        "type": "file"
+      },
+      "transformation": {
+        "type": "WRITE",
+        "expression": "WRITE EXTRACT-RECORD TO EXTRACT-FILE (BHSCOEXT DD)",
+        "line": 0
+      },
+      "cross_language": false
+    },
+    {
+      "id": "crdb2ext-assert-005",
+      "source": {
+        "entity": "CRISK.CUST_ACCOUNT_MASTER",
+        "column": "",
+        "type": "DB2Table"
+      },
+      "target": {
+        "entity": "CRDB2EXT",
+        "column": "",
+        "type": "program"
+      },
+      "transformation": {
+        "type": "EMBEDDED_SQL",
+        "expression": "EXEC SQL OPEN CSR_CUST_ACCT (cursor-driven read of CRISK.CUST_ACCOUNT_MASTER)",
+        "line": 0
+      },
+      "cross_language": false
+    },
+    {
+      "id": "crdb2ext-assert-006",
+      "source": {
+        "entity": "CRISK.CUST_ACCOUNT_MASTER",
+        "column": "UNSECURED_IND",
+        "type": "DB2Table"
+      },
+      "target": {
+        "entity": "CRDB2EXT",
+        "column": "HV-UNSECURED-IND",
+        "type": "program"
+      },
+      "transformation": {
+        "type": "EMBEDDED_SQL",
+        "expression": "EXEC SQL FETCH CSR_CUST_ACCT INTO :HV-UNSECURED-IND",
+        "line": 0
+      },
+      "cross_language": false
+    }
+  ],
+  "ground_truth_cross_language": [],
+  "copybooks": ["CRCUSTAC"],
+  "db2_cursors": ["CSR_CUST_ACCT"],
+  "jcl_step": "CRJBHSCR.STEP010",
+  "generated_at": "2026-06-11T00:00:00+00:00",
+  "_annotation": "Hand-annotated ground truth for MI4014 CRDB2EXT.cbl — DB2 cursor extraction to sequential file"
+}

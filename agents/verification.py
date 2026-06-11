@@ -11,6 +11,26 @@ _PIC_ALPHA = re.compile(r"PIC\s+X", re.IGNORECASE)
 _SQL_NUMERIC = {"INTEGER", "INT", "BIGINT", "SMALLINT", "DECIMAL", "NUMERIC", "FLOAT", "DOUBLE", "NUMBER"}
 _SQL_ALPHA = {"VARCHAR", "CHAR", "NVARCHAR", "TEXT", "CLOB", "STRING"}
 
+# Banned Working-Storage prefixes — entities starting with these are internal
+# memory variables and must NEVER appear as lineage source or target entities.
+_WS_BANNED_PREFIXES: tuple[str, ...] = (
+    "WS-", "HV-", "FILLER", "SQLCA", "SQLCODE", "SQLERRM", "SQLSTATE",
+)
+_WS_BANNED_SUFFIXES: tuple[str, ...] = (
+    "-STATUS", "-COUNTERS", "-FLAGS", "-RETURN-CODE", "-EOF",
+)
+
+
+def _is_ws_variable(entity_name: str) -> bool:
+    """Return True if entity_name is a COBOL Working-Storage internal variable."""
+    if not entity_name:
+        return False
+    upper = entity_name.upper().strip()
+    return (
+        any(upper.startswith(p) for p in _WS_BANNED_PREFIXES)
+        or any(upper.endswith(s) for s in _WS_BANNED_SUFFIXES)
+    )
+
 
 class VerificationGate:
     """Programmatic verification of lineage assertions against source ASTs.
@@ -30,6 +50,8 @@ class VerificationGate:
     ) -> list[dict[str, Any]]:
         """Verify a list of assertions against the parsed AST chunks.
 
+        Pre-filters WS-/HV- internal variable assertions before structural checks.
+
         Args:
             assertions: OpenLineage-format assertion dicts from an agent.
             chunks: Parsed ChunkMetadata objects for the same file.
@@ -40,9 +62,37 @@ class VerificationGate:
         """
         results: list[dict[str, Any]] = []
         for assertion in assertions:
+            ws_result = self._check_ws_filter(assertion)
+            if ws_result is not None:
+                results.append(ws_result)
+                continue
             result = self._verify_one(assertion, chunks)
             results.append(result)
         return results
+
+    def _check_ws_filter(
+        self,
+        assertion: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Return a failed result if the assertion references a WS-/HV- variable.
+
+        Returns None if the assertion should proceed to normal verification.
+        """
+        src_entity = assertion.get("source", {}).get("entity", "")
+        tgt_entity = assertion.get("target", {}).get("entity", "")
+        if _is_ws_variable(src_entity) or _is_ws_variable(tgt_entity):
+            banned = src_entity if _is_ws_variable(src_entity) else tgt_entity
+            return {
+                "assertion_id": assertion.get("id", "unknown"),
+                "checks": [{"name": "ws_variable_filter", "passed": False, "evidence": f"banned WS-/HV- entity: '{banned}'"}],
+                "passed": False,
+                "evidence": "",
+                "error_msg": (
+                    f"WS-variable filtered: entity '{banned}' is an internal COBOL "
+                    "Working-Storage variable, not a physical data entity."
+                ),
+            }
+        return None
 
     def _verify_one(
         self,

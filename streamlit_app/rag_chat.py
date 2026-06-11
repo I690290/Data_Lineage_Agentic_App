@@ -87,11 +87,18 @@ def main() -> None:
                 full_answer = ""
                 citations: list[dict] = []
 
+                # Pass prior conversation turns for follow-up context
+                prior_history = [
+                    {"role": m["role"], "content": m["content"]}
+                    for m in st.session_state.messages[:-1]  # exclude the just-added user turn
+                ]
+
                 if stream_mode:
                     for token in stream_rag_response(
                         user_input,
                         api_base_url=FASTAPI_BASE_URL,
                         max_chunks=max_chunks,
+                        history=prior_history,
                     ):
                         if isinstance(token, CitationsPayload):
                             citations = token.citations
@@ -102,7 +109,9 @@ def main() -> None:
                 else:
                     placeholder.markdown("_Thinking…_")
                     try:
-                        result = api_client.ask_sync(user_input, max_chunks=max_chunks)
+                        result = api_client.ask_sync(
+                            user_input, max_chunks=max_chunks, history=prior_history
+                        )
                         full_answer = result.answer
                         citations = result.citations
                         placeholder.markdown(full_answer)

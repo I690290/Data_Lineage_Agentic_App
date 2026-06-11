@@ -22,3 +22,6 @@ hash_cache.db
 # Node.js packages
 node_modules/
 frontend/node_modules/
+
+
+CLAUDE.md

@@ -1,0 +1,137 @@
+{
+  "file_path": "mock_code/cobol/CRTXNEXT.cbl",
+  "language": "COBOL",
+  "chunk_count": 5,
+  "ground_truth_assertions": [
+    {
+      "id": "crtxnext-assert-001",
+      "source": {
+        "entity": "CUST.BHSCORE.EXTRACT",
+        "column": "",
+        "type": "file"
+      },
+      "target": {
+        "entity": "CRTXNEXT",
+        "column": "",
+        "type": "program"
+      },
+      "transformation": {
+        "type": "READ",
+        "expression": "READ CUST-EXTRACT-FILE (BHSCOEXT DD) — driving file sequential read",
+        "line": 0
+      },
+      "cross_language": false
+    },
+    {
+      "id": "crtxnext-assert-002",
+      "source": {
+        "entity": "CRISK.DAILY_TRANSACTIONS",
+        "column": "EXTERNAL_ACCOUNT_NUMBER",
+        "type": "DB2Table",
+        "data_type": "VARCHAR"
+      },
+      "target": {
+        "entity": "CRTXNEXT",
+        "column": "HV-TXN-EXT-ACCT",
+        "type": "program",
+        "data_type": "PIC X(20)"
+      },
+      "transformation": {
+        "type": "EMBEDDED_SQL",
+        "expression": "EXEC SQL FETCH CSR_DAILY_TXN INTO :HV-TXN-EXT-ACCT",
+        "line": 0
+      },
+      "cross_language": false
+    },
+    {
+      "id": "crtxnext-assert-003",
+      "source": {
+        "entity": "CRISK.DAILY_TRANSACTIONS",
+        "column": "TRANSACTION_CODE",
+        "type": "DB2Table"
+      },
+      "target": {
+        "entity": "CRTXNEXT",
+        "column": "HV-TXN-CODE",
+        "type": "program"
+      },
+      "transformation": {
+        "type": "EMBEDDED_SQL",
+        "expression": "EXEC SQL FETCH CSR_DAILY_TXN INTO :HV-TXN-CODE",
+        "line": 0
+      },
+      "cross_language": false
+    },
+    {
+      "id": "crtxnext-assert-004",
+      "source": {
+        "entity": "CRISK.DAILY_TRANSACTIONS",
+        "column": "TRANSACTION_AMT",
+        "type": "DB2Table",
+        "data_type": "DECIMAL"
+      },
+      "target": {
+        "entity": "CRTXNEXT",
+        "column": "HV-TXN-AMT",
+        "type": "program",
+        "data_type": "PIC S9(13)V99 COMP-3"
+      },
+      "transformation": {
+        "type": "EMBEDDED_SQL",
+        "expression": "EXEC SQL FETCH CSR_DAILY_TXN INTO :HV-TXN-AMT",
+        "line": 0
+      },
+      "cross_language": false
+    },
+    {
+      "id": "crtxnext-assert-005",
+      "source": {
+        "entity": "CRTXNEXT",
+        "column": "",
+        "type": "program"
+      },
+      "target": {
+        "entity": "TRANS.BHSCORE.EXTRACT",
+        "column": "",
+        "type": "file"
+      },
+      "transformation": {
+        "type": "WRITE",
+        "expression": "WRITE TRANS-EXTRACT-RECORD TO TRANS-EXTRACT-FILE (BHSCOTXN DD)",
+        "line": 0
+      },
+      "cross_language": false
+    },
+    {
+      "id": "crtxnext-assert-006",
+      "source": {
+        "entity": "CRISK.DAILY_TRANSACTIONS",
+        "column": "POSTED_DATE",
+        "type": "DB2Table"
+      },
+      "target": {
+        "entity": "CRTXNEXT",
+        "column": "HV-TXN-POSTED-DT",
+        "type": "program"
+      },
+      "transformation": {
+        "type": "EMBEDDED_SQL",
+        "expression": "EXEC SQL FETCH CSR_DAILY_TXN INTO :HV-TXN-POSTED-DT",
+        "line": 0
+      },
+      "cross_language": false
+    }
+  ],
+  "ground_truth_cross_language": [
+    {
+      "source": { "entity": "CUST.BHSCORE.EXTRACT", "type": "file" },
+      "target": { "entity": "CRTXNEXT", "type": "program" },
+      "transformation": { "type": "READ", "expression": "cross-file: CRDB2EXT output → CRTXNEXT input" }
+    }
+  ],
+  "copybooks": ["CRCUSTAC", "CRTRANSR"],
+  "db2_cursors": ["CSR_DAILY_TXN"],
+  "jcl_step": "CRJBHSCR.STEP020",
+  "generated_at": "2026-06-11T00:00:00+00:00",
+  "_annotation": "Hand-annotated ground truth for MI4014 CRTXNEXT.cbl — reads CUST extract + DB2 transactions, writes TRANS extract"
+}

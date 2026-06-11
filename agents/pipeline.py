@@ -12,6 +12,7 @@ from agents.cross_language_linker import CrossLanguageLinker
 from agents.react_agent import (
     cobol_extraction_agent,
     java_extraction_agent,
+    jcl_extraction_agent,
     sql_extraction_agent,
 )
 from agents.reflexion import ReflexionRetry
@@ -25,6 +26,16 @@ _orchestrator = ParserOrchestrator()
 _verifier = VerificationGate()
 _reflexion = ReflexionRetry(max_retries=settings.reflexion_max_retries)
 _emitter = OpenLineageEmitter()
+
+# Load oracle evaluators once at module level (non-fatal if oracle is absent)
+try:
+    from evaluation.expected_lineage_evaluator import ExpectedLineageEvaluator
+    from evaluation.path_evaluator import PathEvaluator
+    _expected_eval = ExpectedLineageEvaluator()
+    _path_eval = PathEvaluator()
+except Exception:
+    _expected_eval = None  # type: ignore[assignment]
+    _path_eval = None  # type: ignore[assignment]
 
 
 # ---------------------------------------------------------------------------
@@ -94,6 +105,9 @@ def verify_assertions_node(state: dict[str, Any]) -> dict[str, Any]:
 def reflexion_retry_node(state: dict[str, Any]) -> dict[str, Any]:
     """Update episodic memory and increment retry counter.
 
+    Enriches episodic memory with oracle checklist hints (if available) so the
+    agent knows exactly which expected lineage elements are still missing.
+
     Args:
         state: Current LineageState with ``verification_results``.
 
@@ -103,7 +117,35 @@ def reflexion_retry_node(state: dict[str, Any]) -> dict[str, Any]:
     verification_results = state.get("verification_results", [])
     retry_count = state.get("retry_count", 0)
     print(f"[reflexion] Retry {retry_count + 1}/{settings.reflexion_max_retries}")
-    return _reflexion.update_state(state, verification_results)
+
+    # Gather oracle-based hints for missing expected lineage elements
+    checklist_hints: list[str] = []
+    if _expected_eval is not None or _path_eval is not None:
+        verified = state.get("verified_lineage", [])
+        extracted_assertions = state.get("extracted_assertions", [])
+        all_assertions = verified + extracted_assertions
+
+        nodes = [
+            {"name": a.get("source", {}).get("entity", ""), "id": a.get("source", {}).get("entity", "")}
+            for a in all_assertions
+        ] + [
+            {"name": a.get("target", {}).get("entity", ""), "id": a.get("target", {}).get("entity", "")}
+            for a in all_assertions
+        ]
+        edges = [
+            {
+                "source": a.get("source", {}).get("entity", ""),
+                "target": a.get("target", {}).get("entity", ""),
+            }
+            for a in all_assertions
+        ]
+
+        if _expected_eval is not None:
+            checklist_hints.extend(_expected_eval.checklist_hints_for_reflexion(nodes, edges))
+        if _path_eval is not None:
+            checklist_hints.extend(_path_eval.reflexion_hints(nodes, edges))
+
+    return _reflexion.update_state(state, verification_results, checklist_hints=checklist_hints)
 
 
 def cross_language_linker_node(state: dict[str, Any]) -> dict[str, Any]:
@@ -235,9 +277,11 @@ def route_by_language(state: dict[str, Any]) -> str:
         return "cobol_agent"
     if language == "java":
         return "java_agent"
-    if language in ("sql",):
+    if language == "sql":
         return "sql_agent"
-    # JCL, config, unknown → skip extraction, go to linker directly
+    if language == "jcl":
+        return "jcl_agent"
+    # config, unknown → skip extraction, go to linker directly
     return "cross_language_linker"
 
 
@@ -277,6 +321,7 @@ def build_pipeline() -> Any:
     graph.add_node("cobol_agent", cobol_extraction_agent)
     graph.add_node("java_agent", java_extraction_agent)
     graph.add_node("sql_agent", sql_extraction_agent)
+    graph.add_node("jcl_agent", jcl_extraction_agent)
     graph.add_node("verification_gate", verify_assertions_node)
     graph.add_node("reflexion_retry", reflexion_retry_node)
     graph.add_node("cross_language_linker", cross_language_linker_node)
@@ -294,12 +339,13 @@ def build_pipeline() -> Any:
             "cobol_agent": "cobol_agent",
             "java_agent": "java_agent",
             "sql_agent": "sql_agent",
+            "jcl_agent": "jcl_agent",
             "cross_language_linker": "cross_language_linker",
         },
     )
 
     # All language agents → verification
-    for agent_node in ("cobol_agent", "java_agent", "sql_agent"):
+    for agent_node in ("cobol_agent", "java_agent", "sql_agent", "jcl_agent"):
         graph.add_edge(agent_node, "verification_gate")
 
     # Verification → conditional: retry or proceed

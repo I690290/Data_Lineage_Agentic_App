@@ -41,29 +41,34 @@ class LineageAPIClient:
 
     def get_summary(self) -> dict[str, Any]:
         """Fetch lineage summary counts from the API."""
-        return self._get("/lineage/summary")
+        return self._get("/api/lineage/summary")
 
     def get_history(self) -> list[dict[str, Any]]:
         """Fetch recent RAG history entries."""
-        return self._get("/rag/history")
+        return self._get("/api/rag/history")
 
     def delete_history(self) -> None:
         """Clear all RAG history."""
         with httpx.Client(timeout=self._timeout) as client:
-            response = client.delete(f"{self._base_url}/rag/history")
+            response = client.delete(f"{self._base_url}/api/rag/history")
         if response.status_code != 200:
-            raise APIClientError(f"DELETE /rag/history returned {response.status_code}")
+            raise APIClientError(f"DELETE /api/rag/history returned {response.status_code}")
 
-    def ask_sync(self, question: str, max_chunks: int = 8) -> RagAnswer:
+    def ask_sync(self, question: str, max_chunks: int = 8, history: list[dict] | None = None) -> RagAnswer:
         """Send a non-streaming RAG query."""
         with httpx.Client(timeout=self._timeout) as client:
             response = client.post(
-                f"{self._base_url}/rag/ask",
-                json={"question": question, "stream": False, "max_chunks": max_chunks},
+                f"{self._base_url}/api/rag/ask",
+                json={
+                    "question": question,
+                    "stream": False,
+                    "max_chunks": max_chunks,
+                    "history": history or [],
+                },
             )
         if response.status_code != 200:
             raise APIClientError(
-                f"POST /rag/ask returned {response.status_code}: {response.text[:200]}"
+                f"POST /api/rag/ask returned {response.status_code}: {response.text[:200]}"
             )
         data = response.json()
         return RagAnswer(answer=data.get("answer", ""), citations=data.get("citations", []))

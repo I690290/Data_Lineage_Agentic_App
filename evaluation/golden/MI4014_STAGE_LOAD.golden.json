@@ -1,0 +1,95 @@
+{
+  "file_path": "mock_code/sql/MI4014_STAGE_LOAD.sql",
+  "language": "SQL",
+  "chunk_count": 2,
+  "ground_truth_assertions": [
+    {
+      "id": "mi4014-stage-assert-001",
+      "source": {
+        "entity": "BDD_NEPTUNE_DICC.MI4014_TRANSACCIONES_DIARIAS",
+        "column": "MAIN_ACCOUNT_NUMBER",
+        "type": "table"
+      },
+      "target": {
+        "entity": "BDD_NEPTUNE_DICC.MI4014_TRANSACCIONES_STG",
+        "column": "MAIN_ACCOUNT_NUMBER",
+        "type": "table"
+      },
+      "transformation": {
+        "type": "SQL_LINEAGE",
+        "expression": "INSERT INTO MI4014_TRANSACCIONES_STG SELECT TRIM(MAIN_ACCOUNT_NUMBER) FROM MI4014_TRANSACCIONES_DIARIAS",
+        "line": 0
+      },
+      "cross_language": false
+    },
+    {
+      "id": "mi4014-stage-assert-002",
+      "source": {
+        "entity": "BDD_NEPTUNE_DICC.MI4014_TRANSACCIONES_DIARIAS",
+        "column": "TRANSACTION_AMOUNT",
+        "type": "table"
+      },
+      "target": {
+        "entity": "BDD_NEPTUNE_DICC.MI4014_TRANSACCIONES_STG",
+        "column": "TRANSACTION_AMOUNT",
+        "type": "table"
+      },
+      "transformation": {
+        "type": "SQL_LINEAGE",
+        "expression": "TO_NUMBER(TRIM(TRANSACTION_AMOUNT),'FM9999999999999.99') — type cast VARCHAR2 to NUMBER(15,2)",
+        "line": 0
+      },
+      "cross_language": false
+    },
+    {
+      "id": "mi4014-stage-assert-003",
+      "source": {
+        "entity": "BDD_NEPTUNE_DICC.MI4014_TRANSACCIONES_DIARIAS",
+        "column": "POSTED_DATE",
+        "type": "table"
+      },
+      "target": {
+        "entity": "BDD_NEPTUNE_DICC.MI4014_TRANSACCIONES_STG",
+        "column": "POSTED_DATE",
+        "type": "table"
+      },
+      "transformation": {
+        "type": "SQL_LINEAGE",
+        "expression": "TO_DATE(POSTED_DATE,'YYYY-MM-DD') — VARCHAR2 to DATE conversion",
+        "line": 0
+      },
+      "cross_language": false
+    },
+    {
+      "id": "mi4014-stage-assert-004",
+      "source": {
+        "entity": "BDD_NEPTUNE_DICC.MI4014_TRANSACCIONES_DIARIAS",
+        "column": "SUB_ACCOUNT_NUMBER",
+        "type": "table"
+      },
+      "target": {
+        "entity": "BDD_NEPTUNE_DICC.MI4014_TRANSACCIONES_STG",
+        "column": "SUB_ACCOUNT_NUMBER",
+        "type": "table"
+      },
+      "transformation": {
+        "type": "SQL_LINEAGE",
+        "expression": "INSERT SELECT with TRIM(SUB_ACCOUNT_NUMBER)",
+        "line": 0
+      },
+      "cross_language": false
+    }
+  ],
+  "ground_truth_cross_language": [
+    {
+      "source": { "entity": "BDD_NEPTUNE_DICC.MI4014_TRANSACCIONES_DIARIAS", "type": "table" },
+      "target": { "entity": "BDD_NEPTUNE_DICC.MI4014_TRANSACCIONES_STG", "type": "table" },
+      "transformation": {
+        "type": "SQL_LINEAGE",
+        "expression": "cross-language: Oracle external table (XML source) → Oracle staging table (typed columns)"
+      }
+    }
+  ],
+  "generated_at": "2026-06-11T00:00:00+00:00",
+  "_annotation": "Hand-annotated ground truth for MI4014_STAGE_LOAD.sql — INSERT from external table to staging with type casts"
+}

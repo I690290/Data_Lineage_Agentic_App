@@ -8,9 +8,8 @@ from fastapi import APIRouter, HTTPException, Query
 router = APIRouter()
 
 # ---------------------------------------------------------------------------
-# Classification helpers — mirrors the logic in src/agent.py so that nodes
-# written by older pipeline runs are corrected at read time without a
-# full re-run.
+# Classification helpers — normalise legacy sub_type/system values on
+# DataEntity nodes at API read time without requiring a full re-run.
 # ---------------------------------------------------------------------------
 
 _LEGACY_TRANSFORM_MAP: dict[str, str] = {
@@ -114,7 +113,7 @@ async def get_column_flow() -> dict[str, Any]:
     connections with per-step column mapping details and code snippets).
     """
     try:
-        from src.neo4j_writer import fetch_all_column_lineage
+        from graph.writer import fetch_all_column_lineage
         return fetch_all_column_lineage()
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))

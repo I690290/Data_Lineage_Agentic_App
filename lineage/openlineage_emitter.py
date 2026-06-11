@@ -124,40 +124,50 @@ class OpenLineageEmitter:
             src = assertion.get("source", {})
             tgt = assertion.get("target", {})
             confidence = float(assertion.get("confidence", 0.5))
+            atype = assertion.get("type", "")
+
+            # Only process assertions that carry physical entity flows
+            # (skip STEP_DEFINITION, JOB_DEFINITION helper assertions)
+            if atype in ("STEP_DEFINITION", "JOB_DEFINITION"):
+                continue
 
             if src.get("entity"):
                 ds = {
                     "name": src["entity"],
-                    "type": src.get("type", "unknown"),
+                    "entity_type": src.get("entity_type", src.get("type", "unknown")),
+                    "namespace": self._entity_namespace(src.get("entity_type", "")),
                     "confidence": confidence,
                 }
-                if ds not in inputs:
+                # Deduplicate by name
+                if not any(d["name"] == ds["name"] for d in inputs):
                     inputs.append(ds)
 
             if tgt.get("entity"):
                 ds_out = {
                     "name": tgt["entity"],
-                    "type": tgt.get("type", "unknown"),
+                    "entity_type": tgt.get("entity_type", tgt.get("type", "unknown")),
+                    "namespace": self._entity_namespace(tgt.get("entity_type", "")),
                     "confidence": confidence,
                 }
-                if ds_out not in outputs:
+                if not any(d["name"] == ds_out["name"] for d in outputs):
                     outputs.append(ds_out)
 
-                # Track column lineage
+                # Track column lineage — only for COLUMN_LINEAGE type assertions
                 tgt_col = tgt.get("column", "")
                 src_col = src.get("column", "")
-                if tgt_col and src_col:
+                if tgt_col and src_col and tgt.get("entity"):
                     if tgt["entity"] not in col_lineage:
                         col_lineage[tgt["entity"]] = []
                     col_lineage[tgt["entity"]].append({
                         "inputField": {
-                            "namespace": "file",
-                            "dataset": src["entity"],
+                            "namespace": self._entity_namespace(src.get("entity_type", "")),
+                            "dataset": src.get("entity", ""),
                             "field": src_col,
                         },
                         "outputField": tgt_col,
                         "transformationType": assertion.get("transformation", {}).get("type", "UNKNOWN"),
                         "transformationDescription": assertion.get("transformation", {}).get("expression", ""),
+                        "paragraph": assertion.get("transformation", {}).get("paragraph", ""),
                     })
 
         lineage_data = {
@@ -171,7 +181,7 @@ class OpenLineageEmitter:
         }
         event = self.emit(lineage_data)
 
-        # Attach column lineage facets to outputs
+        # Attach column lineage facets to outputs, including paragraph (hover state)
         for output in event.get("outputs", []):
             table_name = output.get("name", "")
             if table_name in col_lineage:
@@ -183,6 +193,7 @@ class OpenLineageEmitter:
                             "inputFields": [entry["inputField"]],
                             "transformationDescription": entry["transformationDescription"],
                             "transformationType": entry["transformationType"],
+                            "paragraph": entry.get("paragraph", ""),
                         }
                         for entry in col_lineage[table_name]
                     },
@@ -256,21 +267,40 @@ class OpenLineageEmitter:
             print(f"[openlineage] {len(dead_letter)} invalid events → dead letter: {_DEAD_LETTER_PATH}")
 
     @staticmethod
+    def _entity_namespace(entity_type: str) -> str:
+        """Map an entity_type string to the appropriate OpenLineage namespace."""
+        _NS_MAP: dict[str, str] = {
+            "DB2_TABLE":      "db2://",
+            "ORACLE_TABLE":   "oracle://",
+            "ORACLE_VIEW":    "oracle://",
+            "EXTERNAL_TABLE": "oracle://",
+            "FLAT_FILE":      "file://",
+            "XML_FILE":       "file://",
+            "COBOL_PROGRAM":  "cobol://",
+            "JCL_JOB":        "jcl://",
+            "JAVA_CLASS":     "java://",
+        }
+        return _NS_MAP.get(entity_type.upper() if entity_type else "", "file://")
+
+    @staticmethod
     def _build_dataset(data: dict[str, Any]) -> dict[str, Any]:
         """Build an OpenLineage Dataset object from internal format.
 
         Args:
-            data: Internal dataset dict with ``name``, ``type`` keys.
+            data: Internal dataset dict with ``name``, ``entity_type``, ``namespace`` keys.
 
         Returns:
             OpenLineage Dataset dict.
         """
         name = data.get("name", "unknown")
-        ds_type = data.get("type", "unknown")
-        namespace = "file://" if "file" in ds_type.lower() else "db://"
+        namespace = data.get("namespace") or OpenLineageEmitter._entity_namespace(
+            data.get("entity_type", data.get("type", ""))
+        )
+        entity_type = data.get("entity_type", data.get("type", "unknown"))
         return {
             "namespace": namespace,
             "name": name,
+            "entity_type": entity_type,
             "facets": {
                 "schema": {
                     "_producer": "data-lineage-agent",
@@ -282,6 +312,7 @@ class OpenLineageEmitter:
                     "_schemaURL": "https://openlineage.io/spec/facets/1-0-0/DatasourceDatasetFacet.json",
                     "name": name,
                     "uri": f"{namespace}{name}",
+                    "entityType": entity_type,
                 },
             },
         }

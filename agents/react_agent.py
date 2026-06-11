@@ -235,3 +235,24 @@ def sql_extraction_agent(state: dict[str, Any]) -> dict[str, Any]:
     assertions = _run_react_loop("SQL", chunks, episodic_memory, llm)
     print(f"[sql_agent] Extracted {len(assertions)} assertions")
     return {**state, "extracted_assertions": assertions, "language": "sql"}
+
+
+def jcl_extraction_agent(state: dict[str, Any]) -> dict[str, Any]:
+    """ReAct agent for JCL data lineage extraction.
+
+    Extracts DD statement→DSN mappings, step execution order, DFSORT
+    operations, and FTP transfers from JCL job control files.
+
+    Args:
+        state: Current LangGraph LineageState dict.
+
+    Returns:
+        Updated state with ``extracted_assertions`` populated.
+    """
+    print("[jcl_agent] Starting JCL extraction")
+    chunks = state.get("chunks", [])
+    episodic_memory = state.get("episodic_memory", [])
+    llm = _make_llm()
+    assertions = _run_react_loop("JCL", chunks, episodic_memory, llm)
+    print(f"[jcl_agent] Extracted {len(assertions)} assertions")
+    return {**state, "extracted_assertions": assertions, "language": "jcl"}

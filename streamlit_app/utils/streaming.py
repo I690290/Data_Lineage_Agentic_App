@@ -21,6 +21,7 @@ def stream_rag_response(
     question: str,
     api_base_url: str = FASTAPI_BASE_URL,
     max_chunks: int = 8,
+    history: list[dict] | None = None,
 ) -> Generator[str | CitationsPayload, None, None]:
     """Stream tokens from the FastAPI SSE endpoint.
 
@@ -28,12 +29,13 @@ def stream_rag_response(
         question: User question.
         api_base_url: Base URL of the FastAPI app.
         max_chunks: Maximum retrieved chunks.
+        history: Prior conversation turns for context.
 
     Yields:
         Token strings followed by a citations sentinel.
     """
-    url = f"{api_base_url.rstrip('/')}/rag/ask"
-    payload = {"question": question, "stream": True, "max_chunks": max_chunks}
+    url = f"{api_base_url.rstrip('/')}/api/rag/ask"
+    payload = {"question": question, "stream": True, "max_chunks": max_chunks, "history": history or []}
 
     try:
         with httpx.Client(timeout=httpx.Timeout(120.0)) as client:

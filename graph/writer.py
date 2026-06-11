@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
-from graph.schema import CONSTRAINT_QUERIES
+from graph.schema import CONSTRAINT_QUERIES, entity_type_to_neo4j_label
 
 
 class Neo4jLineageWriter:
@@ -84,8 +85,30 @@ class Neo4jLineageWriter:
         with self._driver.session() as session:
             session.run(query, from_id=from_id, to_id=to_id, props=props)
 
+    def _resolve_label(self, entity_type: str, entity_name: str) -> str:
+        """Return the Neo4j label for a data entity based on entity_type."""
+        return entity_type_to_neo4j_label(entity_type, entity_name)
+
+    def _resolve_program_label(self, language: str) -> str:
+        """Return the Neo4j label for a program node."""
+        lang = language.upper()
+        if lang == "COBOL":
+            return "COBOLProgram"
+        if lang == "JCL":
+            return "JCLJob"
+        if lang == "JAVA":
+            return "JavaClass"
+        if lang == "SQL":
+            return "SQLProcedure"
+        return "COBOLProgram"
+
     def upsert_lineage(self, openlineage_events: list[dict[str, Any]]) -> None:
         """Convert OpenLineage events to Neo4j nodes and edges.
+
+        Uses entity_type facets to assign correct Neo4j labels (DB2Table,
+        FlatFile, XMLFile, OracleTable, OracleView, etc.) instead of the
+        generic File/Table labels.  Stores transformation_expression on
+        MAPS_TO edges for frontend hover-state retrieval.
 
         Args:
             openlineage_events: List of OpenLineage RunEvent dicts.
@@ -94,60 +117,68 @@ class Neo4jLineageWriter:
             job = event.get("job", {})
             job_name = job.get("name", "unknown")
             job_id = f"job_{job_name}"
+            run_facets = event.get("run", {}).get("facets", {}).get("extractionConfig", {})
+            language = run_facets.get("language", "")
+            program_label = self._resolve_program_label(language)
 
-            # Create Job/Program node
-            self.create_node("Program", {
+            # Program / transformation node
+            self.create_node(program_label, {
                 "id": job_id,
                 "name": job_name,
                 "namespace": job.get("namespace", ""),
-                "language": event.get("run", {}).get("facets", {}).get("extractionConfig", {}).get("language", ""),
-                "confidence": event.get("run", {}).get("facets", {}).get("extractionConfig", {}).get("confidence", 0.0),
+                "language": language,
+                "confidence": run_facets.get("confidence", 0.0),
             })
 
-            # Create input dataset nodes + READS_FROM edges
+            # Input dataset nodes + READS_FROM edges
             for inp in event.get("inputs", []):
                 inp_name = inp.get("name", "unknown")
                 inp_id = f"dataset_{inp_name}"
-                self.create_node("File", {
+                inp_type = inp.get("entity_type") or inp.get("type", "")
+                label = self._resolve_label(inp_type, inp_name)
+                self.create_node(label, {
                     "id": inp_id,
                     "name": inp_name,
                     "namespace": inp.get("namespace", ""),
-                    "type": inp.get("type", "unknown"),
+                    "system": inp.get("namespace", "").rstrip("://"),
                 })
                 self.create_edge(job_id, inp_id, "READS_FROM", {
                     "confidence": inp.get("confidence", 0.5),
+                    "program": job_name,
                     "source_location": "",
-                    "transformation_logic": "",
                 })
 
-            # Create output dataset nodes + WRITES_TO edges
+            # Output dataset nodes + WRITES_TO edges
             for out in event.get("outputs", []):
                 out_name = out.get("name", "unknown")
                 out_id = f"dataset_{out_name}"
-                self.create_node("Table", {
+                out_type = out.get("entity_type") or out.get("type", "")
+                label = self._resolve_label(out_type, out_name)
+                self.create_node(label, {
                     "id": out_id,
                     "name": out_name,
                     "namespace": out.get("namespace", ""),
-                    "type": out.get("type", "unknown"),
+                    "system": out.get("namespace", "").rstrip("://"),
                 })
                 self.create_edge(job_id, out_id, "WRITES_TO", {
                     "confidence": out.get("confidence", 0.5),
+                    "program": job_name,
                     "source_location": "",
-                    "transformation_logic": "",
                 })
 
-                # Column lineage edges
+                # Column-level lineage with transformation metadata for hover state
                 col_lineage = out.get("facets", {}).get("columnLineage", {}).get("fields", {})
                 for target_col, lineage_info in col_lineage.items():
                     tgt_col_id = f"col_{out_name}_{target_col}"
                     self.create_node("Column", {
                         "id": tgt_col_id,
                         "name": target_col,
-                        "table": out_name,
+                        "entity": out_name,
+                        "entity_type": out_type,
                         "nullable": True,
                         "data_type": "unknown",
                     })
-                    self.create_edge(out_id, tgt_col_id, "DEFINED_IN", {"file_path": "", "start_line": 0})
+                    self.create_edge(out_id, tgt_col_id, "DEFINED_IN", {"entity": out_name, "position": 0})
 
                     for src_field in lineage_info.get("inputFields", []):
                         src_col_name = src_field.get("field", "")
@@ -156,13 +187,15 @@ class Neo4jLineageWriter:
                         self.create_node("Column", {
                             "id": src_col_id,
                             "name": src_col_name,
-                            "table": src_tbl,
+                            "entity": src_tbl,
+                            "entity_type": inp_type if 'inp_type' in dir() else "",
                             "nullable": True,
                             "data_type": "unknown",
                         })
+                        # Store transformation_expression on the edge for hover state
                         self.create_edge(src_col_id, tgt_col_id, "MAPS_TO", {
                             "mapping_type": lineage_info.get("transformationType", "UNKNOWN"),
-                            "expression": lineage_info.get("transformationDescription", ""),
+                            "transformation_expression": lineage_info.get("transformationDescription", ""),
                             "confidence": 0.9,
                         })
 
@@ -267,3 +300,172 @@ class Neo4jLineageWriter:
         except Exception as exc:
             print(f"[neo4j_writer] Query error: {exc}")
         return {"nodes": nodes, "edges": edges}
+
+
+def fetch_all_column_lineage() -> dict[str, Any]:
+    """Fetch COBOL/JCL/SQL column-level lineage aggregated by entity flow.
+
+    Queries ColumnNode and TransformationStep nodes written by the extraction
+    pipeline. Filters out Java transforms and self-loops. Returns entities
+    (with their column lists) and flows (entity-to-entity connections with
+    per-step column mapping details and code snippets).
+
+    Returns:
+        Dict with keys ``"entities"`` and ``"flows"``.
+    """
+    from neo4j import GraphDatabase
+    from src.config import settings
+
+    driver = GraphDatabase.driver(settings.neo4j_uri, auth=(settings.neo4j_user, settings.neo4j_password))
+    try:
+        with driver.session() as session:
+            result = session.run(
+                """
+                MATCH (src:ColumnNode)-[:TRANSFORMED_BY]->(t:TransformationStep)-[:PRODUCES]->(tgt:ColumnNode)
+                WHERE src.file <> tgt.file
+                RETURN
+                  src.column_id        AS src_col_id,
+                  src.name             AS src_col_name,
+                  src.file             AS src_entity,
+                  t.step_id            AS step_id,
+                  t.name               AS transform_name,
+                  t.type               AS transform_type,
+                  t.language           AS language,
+                  t.file_path          AS file_path,
+                  coalesce(t.program_name, '') AS program_name,
+                  t.code_snippet       AS code_snippet,
+                  toFloat(t.confidence_score) AS confidence,
+                  tgt.column_id        AS tgt_col_id,
+                  tgt.name             AS tgt_col_name,
+                  tgt.file             AS tgt_entity
+                """
+            )
+            rows = [dict(r) for r in result]
+    finally:
+        driver.close()
+
+    if not rows:
+        return {"entities": [], "flows": []}
+
+    def _is_java_name(name: str) -> bool:
+        if not name:
+            return False
+        if re.match(r'^[a-z][a-zA-Z0-9_]*$', name):
+            return True
+        if '.' in name and not re.match(r'^[A-Z0-9][A-Z0-9_-]*$', name):
+            return True
+        return False
+
+    def _is_java_path(s: str) -> bool:
+        return '.java' in (s or '').lower() or '/java/' in (s or '').lower()
+
+    def _keep_row(r: dict) -> bool:
+        lang = r.get('language') or ''
+        name = r.get('transform_name') or ''
+        file_path = r.get('file_path') or ''
+        src_e = r.get('src_entity') or ''
+        tgt_e = r.get('tgt_entity') or ''
+        if _is_java_path(src_e) or _is_java_path(tgt_e):
+            return False
+        if lang == 'sql' or file_path.lower().endswith('.sql'):
+            return True
+        if lang in ('cobol', 'jcl'):
+            return True
+        if lang == 'java' and _is_java_path(file_path):
+            return False
+        if re.match(r'^[A-Z0-9][A-Z0-9-]*$', name):
+            return True
+        if _is_java_name(name):
+            return False
+        return True
+
+    rows = [r for r in rows if _keep_row(r)]
+    if not rows:
+        return {"entities": [], "flows": []}
+
+    def _detect_lang(r: dict) -> str:
+        lang = r.get('language') or ''
+        if lang in ('cobol', 'jcl', 'sql'):
+            return lang
+        file_path = r.get('file_path') or ''
+        if file_path.lower().endswith('.sql'):
+            return 'sql'
+        if file_path.lower().endswith('.jcl'):
+            return 'jcl'
+        return 'cobol'
+
+    def _classify(name: str) -> tuple[str, str]:
+        upper = name.upper()
+        dot_count = name.count('.')
+        if '(' in name:
+            return 'z/OS', 'MainframeDataset'
+        if upper.endswith('.XML') or '.XML.' in upper:
+            return 'z/OS', 'XMLFile'
+        if upper.startswith('BDD_NEPTUNE_DICC.') or upper.startswith('V_MI4014'):
+            return 'Oracle', 'OracleTable'
+        if upper.startswith('V_') and dot_count == 0:
+            return 'Oracle', 'OracleView'
+        if dot_count >= 2:
+            return 'z/OS', 'MainframeDataset'
+        if dot_count == 1:
+            table_part = name.split('.', 1)[1].upper()
+            if '_' in table_part:
+                return 'DB2', 'DB2Table'
+            return 'z/OS', 'MainframeDataset'
+        flat_kw = {'FILE', 'EXTRACT', 'OUTPUT', 'INPUT', 'LOAD', 'REPORT', 'TRANS', 'REJECT', 'VALID'}
+        if any(kw in upper for kw in flat_kw):
+            return 'VSAM', 'MainframeDataset'
+        if any(kw in upper for kw in ('_TABLE', '_LOG', '_MASTER', '_DATA', '_STG', '_DIARIAS', '_SUMMARY', '_DETAIL')):
+            return 'Oracle', 'OracleTable'
+        if upper.startswith('MONTHLY_') or upper.endswith('_REPORT') or upper.endswith('_VIEW'):
+            return 'Oracle', 'OracleView'
+        return 'VSAM', 'MainframeDataset'
+
+    entity_cols: dict[str, set[str]] = {}
+    for r in rows:
+        if r.get('src_entity'):
+            entity_cols.setdefault(r['src_entity'], set()).add(r['src_col_name'] or '')
+        if r.get('tgt_entity'):
+            entity_cols.setdefault(r['tgt_entity'], set()).add(r['tgt_col_name'] or '')
+
+    flow_map: dict[tuple[str, str, str], dict] = {}
+    for r in rows:
+        src_e = r.get('src_entity') or ''
+        tgt_e = r.get('tgt_entity') or ''
+        step_id = r.get('step_id') or ''
+        key = (src_e, step_id, tgt_e)
+        if key not in flow_map:
+            prog_name = r.get('program_name') or r.get('transform_name') or ''
+            flow_map[key] = {
+                'id': step_id,
+                'source_entity': src_e,
+                'target_entity': tgt_e,
+                'program_name': prog_name,
+                'transform_name': r.get('transform_name') or prog_name,
+                'program_type': _detect_lang(r),
+                'transform_type': r.get('transform_type') or '',
+                'code_snippet': r.get('code_snippet') or '',
+                'file_path': r.get('file_path') or '',
+                'confidence_score': r.get('confidence') or 0.5,
+                'column_mappings': [],
+            }
+        flow_map[key]['column_mappings'].append({
+            'source_col': r.get('src_col_name') or '',
+            'target_col': r.get('tgt_col_name') or '',
+            'transform_type': r.get('transform_type') or '',
+            'snippet': r.get('code_snippet') or '',
+        })
+
+    entities = []
+    for entity_name, cols in entity_cols.items():
+        system, entity_type = _classify(entity_name)
+        entity_id = 'entity_' + re.sub(r'[^a-z0-9]', '_', entity_name.lower())
+        entities.append({
+            'id': entity_id,
+            'name': entity_name,
+            'type': entity_type,
+            'system': system,
+            'columns': sorted(c for c in cols if c),
+        })
+
+    return {'entities': entities, 'flows': list(flow_map.values())}

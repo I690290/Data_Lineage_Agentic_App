@@ -1,6 +1,6 @@
 .PHONY: setup install run all dev stop \
         start-neo4j start-jaeger start-backend start-streamlit frontend-install frontend-dev frontend-build frontend-check \
-        ingest extract pipeline streamlit \
+        ingest pipeline streamlit \
         eval test test-unit check-imports clean clean-all status help
 
 # ================================================================
@@ -190,11 +190,7 @@ stop:
 ingest:
 	uv run python main.py ingest --repo ./mock_code
 
-# Step 2a: Legacy LangGraph extraction pipeline (src/agent.py)
-extract:
-	uv run python main.py agent --repo ./mock_code
-
-# Step 2b: ReAct + Reflexion pipeline (agents/pipeline.py)
+# Step 2: ReAct + Reflexion lineage extraction (agents/pipeline.py)
 pipeline:
 	uv run python main.py pipeline --repo ./mock_code
 
@@ -281,7 +277,6 @@ help:
 	@echo "DATA PIPELINE"
 	@echo "  make ingest           Embed mock_code/ into ChromaDB (incremental)"
 	@echo "  make pipeline         Run ReAct+Reflexion lineage extraction"
-	@echo "  make extract          Run legacy LangGraph extraction"
 	@echo "  make eval             Generate golden datasets + run 3-level evaluation"
 	@echo ""
 	@echo "FRONTEND"

@@ -1,0 +1,118 @@
+{
+  "file_path": "mock_code/cobol/CRXMLGEN.cbl",
+  "language": "COBOL",
+  "chunk_count": 4,
+  "ground_truth_assertions": [
+    {
+      "id": "crxmlgen-assert-001",
+      "source": {
+        "entity": "MERGED.BHSCORE.EXTRACT",
+        "column": "",
+        "type": "file"
+      },
+      "target": {
+        "entity": "CRXMLGEN",
+        "column": "",
+        "type": "program"
+      },
+      "transformation": {
+        "type": "READ",
+        "expression": "READ MERGED-EXTRACT-FILE (BHSCOMRG DD) — sequential read of sorted merged file",
+        "line": 0
+      },
+      "cross_language": false
+    },
+    {
+      "id": "crxmlgen-assert-002",
+      "source": {
+        "entity": "CRXMLGEN",
+        "column": "CTR-EXTERNAL-ACCT-NUM",
+        "type": "program"
+      },
+      "target": {
+        "entity": "MI4014_Transaction_Extract_TSB_NAM65_YYYYMMDD.xml",
+        "column": "external_account_number",
+        "type": "file"
+      },
+      "transformation": {
+        "type": "MOVE",
+        "expression": "MOVE CTR-EXTERNAL-ACCT-NUM TO XML-EXTERNAL-ACCT-NUM",
+        "line": 0
+      },
+      "cross_language": false
+    },
+    {
+      "id": "crxmlgen-assert-003",
+      "source": {
+        "entity": "CRXMLGEN",
+        "column": "CTR-TRANSACTION-AMT",
+        "type": "program"
+      },
+      "target": {
+        "entity": "MI4014_Transaction_Extract_TSB_NAM65_YYYYMMDD.xml",
+        "column": "transaction_amt",
+        "type": "file"
+      },
+      "transformation": {
+        "type": "MOVE",
+        "expression": "MOVE CTR-TRANSACTION-AMT TO WS-AMT-DISPLAY then to XML tag",
+        "line": 0
+      },
+      "cross_language": false
+    },
+    {
+      "id": "crxmlgen-assert-004",
+      "source": {
+        "entity": "CRXMLGEN",
+        "column": "",
+        "type": "program"
+      },
+      "target": {
+        "entity": "MI4014_Transaction_Extract_TSB_NAM65_YYYYMMDD.xml",
+        "column": "",
+        "type": "file"
+      },
+      "transformation": {
+        "type": "WRITE",
+        "expression": "WRITE XML-RECORD TO XML-OUTPUT-FILE (BHSCOXML DD)",
+        "line": 0
+      },
+      "cross_language": false
+    },
+    {
+      "id": "crxmlgen-assert-005",
+      "source": {
+        "entity": "CRXMLGEN",
+        "column": "CTR-TRANSACTION-CODE",
+        "type": "program"
+      },
+      "target": {
+        "entity": "MI4014_Transaction_Extract_TSB_NAM65_YYYYMMDD.xml",
+        "column": "transaction_code",
+        "type": "file"
+      },
+      "transformation": {
+        "type": "MOVE",
+        "expression": "MOVE CTR-TRANSACTION-CODE TO XML-TRANSACTION-CODE",
+        "line": 0
+      },
+      "cross_language": false
+    }
+  ],
+  "ground_truth_cross_language": [
+    {
+      "source": { "entity": "MERGED.BHSCORE.EXTRACT", "type": "file" },
+      "target": { "entity": "CRXMLGEN", "type": "program" },
+      "transformation": { "type": "READ", "expression": "cross-file: DFSORT STEP030 output → CRXMLGEN input" }
+    },
+    {
+      "source": { "entity": "CRXMLGEN", "type": "program" },
+      "target": { "entity": "MI4014_Transaction_Extract_TSB_NAM65_YYYYMMDD.xml", "type": "file" },
+      "transformation": { "type": "WRITE", "expression": "cross-language: COBOL → XML → Oracle external table" }
+    }
+  ],
+  "copybooks": ["CRTRANSR", "CRXMLTAG"],
+  "jcl_step": "CRJBHSCR.STEP040",
+  "generated_at": "2026-06-11T00:00:00+00:00",
+  "_annotation": "Hand-annotated ground truth for MI4014 CRXMLGEN.cbl — reads merged extract, generates XML for Oracle load"
+}

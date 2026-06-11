@@ -71,6 +71,7 @@ class AskRequest(BaseModel):
     question: str
     stream: bool = False
     max_chunks: int = 8
+    history: list[dict[str, Any]] = []
 
 
 @router.post("/query")
@@ -94,7 +95,7 @@ async def rag_ask(request: AskRequest) -> Any:
     """
     try:
         rag = _get_rag()
-        answer = rag.query(request.question)
+        answer = rag.query(request.question, history=request.history)
         citations = _fetch_citations(request.question, request.max_chunks)
 
         entry: dict[str, Any] = {
